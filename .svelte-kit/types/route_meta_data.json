@@ -1,0 +1,13 @@
+{
+	"/": [
+		"src/routes/+layout.ts",
+		"src/routes/+layout.ts"
+	],
+	"/case/[id]": [
+		"src/routes/case/[id]/+page.ts",
+		"src/routes/+layout.ts"
+	],
+	"/evidence-board": [
+		"src/routes/+layout.ts"
+	]
+}
