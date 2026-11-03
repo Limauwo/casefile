@@ -185,7 +185,7 @@
     <div class="bg-surface border border-accent w-full max-w-sm rounded-sm shadow-2xl p-6 text-center">
       <AlertTriangle size={48} class="text-accent mx-auto mb-4" />
       <h3 class="font-mono font-bold text-lg text-primary mb-2">SYSTEM PURGE</h3>
-      <p class="text-sm text-secondary mb-6">Are you sure you want to completely erase all local case data? This action will restore the terminal to factory default settings.</p>
+      <p class="text-sm text-secondary mb-6">This permanently deletes all cases, notes, and activity history from this browser. The terminal will be left completely empty. This action cannot be undone.</p>
       
       <div class="flex gap-4 justify-center">
         <button on:click={() => showSettingsModal = false} class="text-secondary hover:text-primary px-4 py-2 font-mono text-sm transition-colors">

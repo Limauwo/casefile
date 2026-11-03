@@ -254,8 +254,9 @@ function saveState() {
 
 export function clearAllData() {
   if (!browser) return;
-  localStoreService.clearData();
-  cases.set(initialCases);
-  activities.set(initialActivities);
-  notes.set(initialNotes);
+  const emptyData = { cases: [], activities: [], notes: [] };
+  localStoreService.saveData(emptyData);
+  cases.set(emptyData.cases);
+  activities.set(emptyData.activities);
+  notes.set(emptyData.notes);
 }
