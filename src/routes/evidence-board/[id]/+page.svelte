@@ -14,6 +14,16 @@
   const NOTE_H = 120; // approximate
   const HUB_W = 140;
   const HUB_H = 70;
+  const GRID_SIZE = 40;
+  let snapToGridEnabled = true;
+
+  function snapToGrid(value: number): number {
+    return Math.max(0, Math.round(value / GRID_SIZE) * GRID_SIZE);
+  }
+
+  function getDragPosition(value: number): number {
+    return snapToGridEnabled ? snapToGrid(value) : Math.max(0, value);
+  }
 
   // Keep a separate hub position for each case while navigating between boards.
   let hubPositions: Record<string, { x: number; y: number }> = {};
@@ -68,8 +78,8 @@
     const board = document.getElementById('evidence-board-canvas');
     if (!board) return;
     const rect = board.getBoundingClientRect();
-    let x = Math.max(0, e.clientX - rect.left - dragOffsetX);
-    let y = Math.max(0, e.clientY - rect.top - dragOffsetY);
+    const x = getDragPosition(e.clientX - rect.left - dragOffsetX);
+    const y = getDragPosition(e.clientY - rect.top - dragOffsetY);
 
     if (dragging.kind === 'note') {
       notes.update(ns => ns.map(n => n.id === (dragging as DragTarget & {kind:'note'}).id ? { ...n, positionX: x, positionY: y } : n));
@@ -220,9 +230,18 @@
         <Map size={24} class="text-accent" />
         EVIDENCE BOARD <span class="text-accent">{caseItem.caseNumber}</span>
       </h1>
-      <p class="text-secondary font-mono text-xs mt-0.5">{caseItem.title} · Drag notes and case hub to reorganize</p>
+      <p class="text-secondary font-mono text-xs mt-0.5">{caseItem.title} · Drag notes and case hub · 40px grid</p>
     </div>
     <div class="flex items-center gap-3">
+      <label for="snap-to-grid" class="inline-flex items-center gap-2 text-secondary font-mono text-[10px] cursor-pointer select-none">
+        <input
+          id="snap-to-grid"
+          type="checkbox"
+          bind:checked={snapToGridEnabled}
+          class="accent-[#A64242]"
+        />
+        SNAP TO GRID
+      </label>
       <span class="font-mono text-xs text-secondary border border-border px-2 py-1 rounded-sm">
         {boardNotes.length} NOTES · CASE-SPECIFIC
       </span>
@@ -237,7 +256,7 @@
     <div
       id="evidence-board-canvas"
       class="flex-1 relative overflow-auto border border-border rounded-sm"
-      style="background-color: #111315; background-image: radial-gradient(circle, #1e2226 1px, transparent 1px); background-size: 28px 28px; min-height: 600px;"
+      style="background-color: #111315; background-image: linear-gradient(to right, #30353a 1px, transparent 1px), linear-gradient(to bottom, #30353a 1px, transparent 1px); background-size: {GRID_SIZE}px {GRID_SIZE}px; min-height: 600px;"
     >
       <!-- SVG Thread Overlay -->
       <svg class="absolute inset-0 pointer-events-none z-10" style="width: 100%; height: 100%; overflow: visible;">
