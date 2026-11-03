@@ -1,6 +1,8 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { cases, notes, isInitialized, type Note, type Case, addNote, updateNote, deleteNote } from '$lib/store';
+  import NoteEditor from '$lib/NoteEditor.svelte';
+  import { formatNoteContent } from '$lib/noteFormatting';
   import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft } from 'lucide-svelte';
   import { onDestroy } from 'svelte';
 
@@ -331,7 +333,7 @@
             </button>
 
             <h3 class="font-bold text-[#1a1a1a] text-xs mb-1.5 pr-5 font-mono uppercase tracking-wide">{note.title}</h3>
-            <p class="text-[#333] text-xs leading-relaxed font-serif line-clamp-4">{note.content || '—'}</p>
+            <div class="text-[#333] text-xs leading-relaxed font-serif line-clamp-4">{@html formatNoteContent(note.content || '—')}</div>
 
             <div class="mt-2 pt-1.5 border-t border-[#c8c4b0] flex items-center justify-between">
               {#if note.relatedCaseId}
@@ -400,7 +402,7 @@
         </div>
         <div class="space-y-1">
           <label for="evidence-content" class="font-mono text-xs text-secondary">FIELD NOTES</label>
-          <textarea id="evidence-content" bind:value={formContent} rows="5" placeholder="Observations, leads, suspects..." class="w-full bg-background border border-border text-sm rounded-sm px-3 py-2 focus:outline-none focus:border-accent text-primary resize-none"></textarea>
+          <NoteEditor id="evidence-content" bind:value={formContent} rows={5} placeholder="Observations, leads, suspects..." />
         </div>
         <fieldset class="space-y-2">
           <legend class="font-mono text-xs text-secondary">SUPPORTED BY · SELECT PARENT EVIDENCE</legend>

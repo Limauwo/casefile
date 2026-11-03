@@ -1,6 +1,8 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { cases, activities, notes, isInitialized, type Case, type Priority, type Status, updateCase, addNote, updateNote, deleteNote } from '$lib/store';
+  import NoteEditor from '$lib/NoteEditor.svelte';
+  import { formatNoteContent } from '$lib/noteFormatting';
   import { FileText, ArrowLeft, Clock, Activity as ActivityIcon, Edit3, Trash2, Plus, X, AlertTriangle, CheckCircle, Map } from 'lucide-svelte';
 
   $: caseId = $page.params.id ?? '';
@@ -241,7 +243,7 @@
                   </button>
                 </div>
               </div>
-              <p class="text-secondary text-sm whitespace-pre-wrap leading-relaxed">{note.content || '—'}</p>
+              <div class="text-secondary text-sm leading-relaxed">{@html formatNoteContent(note.content || '—')}</div>
               <p class="font-mono text-[10px] text-secondary/50 mt-2 pt-2 border-t border-border/50">Updated {fmt(note.updatedAt)}</p>
             </div>
           {/each}
@@ -294,7 +296,7 @@
           </div>
           <div class="space-y-1">
             <label class="font-mono text-xs text-secondary">CONTENT</label>
-            <textarea bind:value={formNoteContent} rows="6" placeholder="Field observations, leads, suspects..." class="w-full bg-background border border-border text-sm rounded-sm px-3 py-2 focus:outline-none focus:border-accent text-primary resize-none"></textarea>
+            <NoteEditor id="case-note-content" bind:value={formNoteContent} rows={6} placeholder="Field observations, leads, suspects..." />
           </div>
         </div>
         <div class="p-4 border-t border-border bg-background/50 flex justify-between items-center">
