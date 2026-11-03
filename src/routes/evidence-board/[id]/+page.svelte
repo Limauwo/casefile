@@ -348,30 +348,34 @@
             >
               <Edit3 size={12} />
             </button>
-            <button
-              on:click|stopPropagation={() => showNotePreview(note)}
-              class="absolute top-1.5 right-7 text-[#111315]/50 hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity bg-[#e9e5d0] rounded p-0.5"
-              aria-label="Read full note: {note.title}"
-              title="Read full note"
-            >
-              <Eye size={12} />
-            </button>
-
             <h3 class="font-bold text-[#1a1a1a] text-xs mb-1.5 pr-5 font-mono uppercase tracking-wide">{note.title}</h3>
             <div class="text-[#333] text-xs leading-relaxed font-serif line-clamp-4">{@html formatNoteContent(note.content || '—')}</div>
 
             <div class="mt-2 pt-1.5 border-t border-[#c8c4b0] flex items-center justify-between">
-              {#if note.relatedCaseId}
-                {@const linked = $cases.find(c => c.id === note.relatedCaseId)}
-                {#if linked}
-                  <span class="font-mono text-[9px] text-accent font-bold">⚑ {linked.caseNumber}</span>
+              <div class="flex items-center gap-2 min-w-0">
+                {#if note.relatedCaseId}
+                  {@const linked = $cases.find(c => c.id === note.relatedCaseId)}
+                  {#if linked}
+                    <span class="font-mono text-[9px] text-accent font-bold">⚑ {linked.caseNumber}</span>
+                  {:else}
+                    <span class="font-mono text-[9px] text-[#888]">UNLINKED</span>
+                  {/if}
                 {:else}
                   <span class="font-mono text-[9px] text-[#888]">UNLINKED</span>
                 {/if}
-              {:else}
-                <span class="font-mono text-[9px] text-[#888]">UNLINKED</span>
-              {/if}
-              <span class="font-mono text-[9px] text-[#888]">{formatDate(note.updatedAt)}</span>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <button
+                  on:click|stopPropagation={() => showNotePreview(note)}
+                  class="inline-flex items-center gap-1 font-mono text-[9px] leading-none text-[#555] hover:text-accent transition-colors"
+                  aria-label="Read full note: {note.title}"
+                  title="Read full note"
+                >
+                  <Eye size={11} class="block shrink-0" />
+                  <span class="block leading-none">READ MORE</span>
+                </button>
+                <span class="font-mono text-[9px] text-[#888]">{formatDate(note.updatedAt)}</span>
+              </div>
             </div>
           </div>
         </div>
