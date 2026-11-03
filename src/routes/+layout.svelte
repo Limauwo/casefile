@@ -24,6 +24,7 @@
     if (currentPath === '/') return 'command-center';
     if (currentPath === '/evidence-board') return 'evidence-board';
     if (currentPath.startsWith('/case/')) return `dossier`;
+    if (currentPath === '/investigations/open') return 'investigations / open-cases';
     return currentPath.replace('/', '');
   })();
 </script>
@@ -57,10 +58,10 @@
           <p class="font-mono text-xs text-secondary font-semibold tracking-wider">INVESTIGATIONS</p>
         </li>
         <li>
-          <button on:click={() => filterAndGo('open')} class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {$filterStatus === 'open' && currentPath === '/' ? 'bg-border text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-border/50'}">
+          <a href="/investigations/open" class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {currentPath === '/investigations/open' ? 'bg-border text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-border/50'}">
             <FolderOpen size={18} />
             Open Cases
-          </button>
+          </a>
         </li>
         <li>
           <button on:click={() => filterAndGo('in_progress')} class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {$filterStatus === 'in_progress' && currentPath === '/' ? 'bg-border text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-border/50'}">
@@ -162,7 +163,7 @@
               </li>
               <li class="pt-4 pb-2 px-3"><p class="font-mono text-xs text-secondary font-semibold tracking-wider">FILTER BY STATUS</p></li>
               <li><button on:click={() => filterAndGo('all')} class="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary"><LayoutDashboard size={18} /> All Cases</button></li>
-              <li><button on:click={() => filterAndGo('open')} class="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary"><FolderOpen size={18} /> Open Cases</button></li>
+              <li><a href="/investigations/open" on:click={() => showMobileMenu = false} class="flex items-center gap-3 px-3 py-2 text-sm {currentPath === '/investigations/open' ? 'bg-border text-primary' : 'text-secondary'}"><FolderOpen size={18} /> Open Cases</a></li>
               <li><button on:click={() => filterAndGo('in_progress')} class="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary"><Clock size={18} /> In Progress</button></li>
               <li><button on:click={() => filterAndGo('closed')} class="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary"><FolderArchive size={18} /> Closed</button></li>
               <li class="pt-4"><button on:click={() => { showSettingsModal = true; showMobileMenu = false; }} class="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary"><Settings size={18} /> Settings</button></li>

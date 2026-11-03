@@ -82,6 +82,7 @@ Here is an overview of the key systems powering CASEFILE:
 *   **`src/routes/+layout.svelte`**: The persistent shell. Contains the sidebar navigation, global search, and handles the `isInitialized` bootstrap sequence.
 *   **`src/routes/+layout.ts`**: Contains `export const ssr = false;` to guarantee safe browser-only API usage.
 *   **`src/routes/+page.svelte`**: The root dashboard (Command Center).
+*   **`src/routes/investigations/open/+page.svelte`**: Dedicated list of open investigations.
 *   **`src/routes/case/[id]/+page.svelte`**: The dynamic routing endpoint for individual Case Dossiers.
 *   **`src/routes/evidence-board/+page.svelte`**: The case selector for dedicated evidence boards.
 *   **`src/routes/evidence-board/[id]/+page.svelte`**: The case-specific matrix interface for pinned investigation notes.
