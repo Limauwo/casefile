@@ -124,11 +124,11 @@
     caseToDelete = id;
   }
   function executeDelete() {
-    if (caseToDelete) {
-      deleteCase(caseToDelete as string);
-      caseToDelete = null;
-      if (editingCaseId === caseToDelete) closeModal();
-    }
+    if (!caseToDelete) return;
+    const deletedCaseId = caseToDelete;
+    deleteCase(deletedCaseId);
+    caseToDelete = null;
+    if (editingCaseId === deletedCaseId) closeModal();
   }
 </script>
 
@@ -226,13 +226,6 @@
                     <span class="font-mono text-[10px] px-2 py-0.5 border rounded-sm {getPriorityColor(caseItem.priority)}">
                       {caseItem.priority.toUpperCase()} PRIORITY
                     </span>
-                    <button 
-                      on:click|stopPropagation={() => openModal(caseItem)} 
-                      class="text-secondary hover:text-accent opacity-0 group-hover:opacity-100 transition-all p-1"
-                      title="Edit case"
-                    >
-                      <FileText size={14} />
-                    </button>
                   </div>
                 </div>
                 
@@ -253,6 +246,24 @@
                   </div>
                 </div>
               </a>
+                <div class="flex flex-col gap-2 shrink-0">
+                  <button
+                    on:click={() => openModal(caseItem)}
+                    class="text-secondary hover:text-accent opacity-0 group-hover:opacity-100 transition-all p-1"
+                    title="Edit case"
+                    aria-label="Edit {caseItem.caseNumber}"
+                  >
+                    <FileText size={14} />
+                  </button>
+                  <button
+                    on:click={() => confirmDelete(caseItem.id)}
+                    class="text-secondary hover:text-accent opacity-0 group-hover:opacity-100 transition-all p-1"
+                    title="Delete case"
+                    aria-label="Delete {caseItem.caseNumber}"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
             </div>
           {/each}
         {/if}
@@ -410,7 +421,7 @@
     <div class="bg-surface border border-accent w-full max-w-sm rounded-sm shadow-2xl p-6 text-center">
       <AlertTriangle size={48} class="text-accent mx-auto mb-4" />
       <h3 class="font-mono font-bold text-lg text-primary mb-2">CONFIRM DELETION</h3>
-      <p class="text-sm text-secondary mb-6">This action cannot be undone. The case file will be permanently expunged from the system.</p>
+      <p class="text-sm text-secondary mb-6">This permanently deletes the selected case and its attached evidence notes. Activity history for this case will also remain in the system log. This action cannot be undone.</p>
       
       <div class="flex gap-4 justify-center">
         <button on:click={() => caseToDelete = null} class="text-secondary hover:text-primary px-4 py-2 font-mono text-sm transition-colors">
