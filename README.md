@@ -7,7 +7,7 @@
 *   **Command Center**: A sleek, intelligence-terminal-styled dashboard providing a high-level overview of active cases, metrics, and recent system activity.
 *   **Core Task Management**: Create, edit, and organize cases with priorities (Low, Medium, High, Critical) and statuses (Open, In Progress, Closed). Cases automatically receive a unique identifier (e.g., `CASE-042`).
 *   **Case Dossiers**: Dedicated detail pages for each case, showing metadata, an isolated activity log, and case-specific evidence notes.
-*   **Evidence Board**: A visual matrix where you can pin notes and connect them to specific case files.
+*   **Evidence Board**: A dedicated visual matrix for each case, with case-specific notes and independently arranged evidence.
 *   **System Activity Log**: Automatically tracks and audits all creations, modifications, and deletions within the system securely.
 *   **Persistent Storage**: Operates entirely locally in your browser. All cases, notes, and activity logs are persisted via `localStorage` so data remains even after refreshes.
 *   **Investigation Search**: Contextual search functionality capable of securely scanning through case files and notes simultaneously.
@@ -83,7 +83,8 @@ Here is an overview of the key systems powering CASEFILE:
 *   **`src/routes/+layout.ts`**: Contains `export const ssr = false;` to guarantee safe browser-only API usage.
 *   **`src/routes/+page.svelte`**: The root dashboard (Command Center).
 *   **`src/routes/case/[id]/+page.svelte`**: The dynamic routing endpoint for individual Case Dossiers.
-*   **`src/routes/evidence-board/+page.svelte`**: The matrix interface for pinned investigation notes.
+*   **`src/routes/evidence-board/+page.svelte`**: The case selector for dedicated evidence boards.
+*   **`src/routes/evidence-board/[id]/+page.svelte`**: The case-specific matrix interface for pinned investigation notes.
 
 ## ⚠️ System Purge
 
