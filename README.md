@@ -88,4 +88,4 @@ Here is an overview of the key systems powering CASEFILE:
 
 ## System Purge
 
-If you need to wipe all data and return the system to factory settings (with initial demo data), click on **System Settings** in the bottom left of the navigation sidebar and execute a System Purge. **This cannot be undone.**
+To permanently delete all local cases, notes, and activity history and leave the system empty, click on **System Settings** in the bottom left of the navigation sidebar and execute a System Purge. **This cannot be undone.**
