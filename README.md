@@ -2,7 +2,7 @@
 
 **CASEFILE** is an investigation-themed personal to-do list and productivity dashboard. Inspired by detective investigations, intelligence agency terminals, and classified documents, it transforms your daily tasks into an immersive case management system.
 
-## 🕵️‍♂️ Features
+## Features
 
 *   **Command Center**: A sleek, intelligence-terminal-styled dashboard providing a high-level overview of active cases, metrics, and recent system activity.
 *   **Core Task Management**: Create, edit, and organize cases with priorities (Low, Medium, High, Critical) and statuses (Open, In Progress, Closed). Cases automatically receive a unique identifier (e.g., `CASE-042`).
@@ -12,7 +12,7 @@
 *   **Persistent Storage**: Operates entirely locally in your browser. All cases, notes, and activity logs are persisted via `localStorage` so data remains even after refreshes.
 *   **Investigation Search**: Contextual search functionality capable of securely scanning through case files and notes simultaneously.
 
-## 🛠️ Technology Stack
+## Tech Stack
 
 *   **Framework**: [SvelteKit](https://kit.svelte.dev/)
 *   **Language**: Svelte 4 / TypeScript
@@ -22,7 +22,7 @@
 
 ---
 
-## 🚀 Setup Instructions (From 0 to Final)
+## Setup Instructions (From 0 to Final)
 
 Follow these steps to initialize and run the CASEFILE terminal on your local machine.
 
@@ -73,7 +73,7 @@ npm run preview
 
 ---
 
-## 📁 Project Architecture
+## Project Architecture
 
 Here is an overview of the key systems powering CASEFILE:
 
@@ -86,6 +86,6 @@ Here is an overview of the key systems powering CASEFILE:
 *   **`src/routes/evidence-board/+page.svelte`**: The case selector for dedicated evidence boards.
 *   **`src/routes/evidence-board/[id]/+page.svelte`**: The case-specific matrix interface for pinned investigation notes.
 
-## ⚠️ System Purge
+## System Purge
 
 If you need to wipe all data and return the system to factory settings (with initial demo data), click on **System Settings** in the bottom left of the navigation sidebar and execute a System Purge. **This cannot be undone.**
