@@ -101,6 +101,7 @@
   let editingNoteId: string | null = null;
   let formTitle = '';
   let formContent = '';
+  let formParentIds: string[] = [];
   let formError = '';
 
   function openModal(n?: Note) {
@@ -108,13 +109,45 @@
       editingNoteId = n.id;
       formTitle = n.title;
       formContent = n.content;
+      formParentIds = n.parentNoteIds ?? [];
     } else {
       editingNoteId = null;
       formTitle = '';
       formContent = '';
+      formParentIds = [];
     }
     formError = '';
     isModalOpen = true;
+  }
+
+  function isDescendantOf(noteId: string, possibleDescendantId: string): boolean {
+    const visited = new Set<string>();
+    const pending = [noteId];
+
+    while (pending.length > 0) {
+      const currentId = pending.pop();
+      if (!currentId || visited.has(currentId)) continue;
+      visited.add(currentId);
+
+      for (const child of boardNotes.filter(note => note.parentNoteIds?.includes(currentId))) {
+        if (child.id === possibleDescendantId) return true;
+        pending.push(child.id);
+      }
+    }
+
+    return false;
+  }
+
+  function canBeParent(note: Note): boolean {
+    return note.id !== editingNoteId &&
+      (!editingNoteId || !isDescendantOf(editingNoteId, note.id));
+  }
+
+  function toggleParent(noteId: string, event: Event) {
+    const checked = (event.currentTarget as HTMLInputElement).checked;
+    formParentIds = checked
+      ? [...new Set([...formParentIds, noteId])]
+      : formParentIds.filter(id => id !== noteId);
   }
 
   function saveNote() {
@@ -122,10 +155,15 @@
       formError = 'A title is required.';
       return;
     }
+    if (formParentIds.some(id => !boardNotes.some(note => note.id === id && canBeParent(note)))) {
+      formError = 'A route cannot link evidence to itself or create a cycle.';
+      return;
+    }
     const noteData = {
       title: formTitle,
       content: formContent,
-      relatedCaseId: caseId
+      relatedCaseId: caseId,
+      parentNoteIds: formParentIds
     };
     if (editingNoteId) {
       updateNote(editingNoteId, noteData);
@@ -196,18 +234,16 @@
           </filter>
         </defs>
 
-        <!-- Threads from note cards → case hubs -->
-        {#each boardNotes as note}
-          {#if note.relatedCaseId && hubPositions[note.relatedCaseId]}
-            {@const hub = hubPositions[note.relatedCaseId]}
-            <!-- Note center-right edge -->
-            {@const nx = note.positionX + NOTE_W}
-            {@const ny = note.positionY + NOTE_H / 2}
-            <!-- Hub center-bottom -->
+        <!-- Case hub connects to top-level evidence -->
+        {#each boardNotes.filter(note => !note.parentNoteIds?.some(id => boardNotes.some(parent => parent.id === id))) as note}
+          {#if hubPositions[caseId]}
+            {@const hub = hubPositions[caseId]}
+            {@const nx = note.positionX + NOTE_W / 2}
+            {@const ny = note.positionY}
             {@const hx = hub.x + HUB_W / 2}
             {@const hy = hub.y + HUB_H}
             <path
-              d={threadPath(nx, ny, hx, hy)}
+              d={threadPath(hx, hy, nx, ny)}
               stroke="#A64242"
               stroke-width="1.5"
               stroke-dasharray="6 3"
@@ -219,22 +255,23 @@
           {/if}
         {/each}
 
-        <!-- Solid thread between sibling notes on same case -->
-        {#each activeCases as c}
-          {@const siblings = boardNotes.filter(n => n.relatedCaseId === c.id)}
-          {#each siblings as n1, i}
-            {#if i < siblings.length - 1}
-              {@const n2 = siblings[i + 1]}
-              {@const x1 = n1.positionX + NOTE_W / 2}
-              {@const y1 = n1.positionY + NOTE_H}
-              {@const x2 = n2.positionX + NOTE_W / 2}
-              {@const y2 = n2.positionY}
+        <!-- Parent evidence connects to each child; multiple parents create multiple routes. -->
+        {#each boardNotes as child}
+          {#each child.parentNoteIds ?? [] as parentId}
+            {@const parent = boardNotes.find(note => note.id === parentId)}
+            {#if parent}
+              {@const x1 = parent.positionX + NOTE_W / 2}
+              {@const y1 = parent.positionY + NOTE_H / 2}
+              {@const x2 = child.positionX + NOTE_W / 2}
+              {@const y2 = child.positionY + NOTE_H / 2}
               <path
                 d={threadPath(x1, y1, x2, y2)}
                 stroke="#A64242"
-                stroke-width="1"
+                stroke-width="1.5"
+                stroke-dasharray="6 3"
                 fill="none"
-                opacity="0.25"
+                opacity="0.7"
+                marker-end="url(#arrowhead)"
               />
             {/if}
           {/each}
@@ -327,11 +364,11 @@
     <div class="shrink-0 flex items-center gap-6 pt-2 px-1">
       <div class="flex items-center gap-2">
         <svg width="32" height="10"><line x1="0" y1="5" x2="32" y2="5" stroke="#A64242" stroke-width="1.5" stroke-dasharray="5 3"/></svg>
-        <span class="font-mono text-[10px] text-secondary">NOTE → CASE LINK</span>
+        <span class="font-mono text-[10px] text-secondary">CASE → TOP-LEVEL EVIDENCE</span>
       </div>
       <div class="flex items-center gap-2">
         <svg width="32" height="10"><line x1="0" y1="5" x2="32" y2="5" stroke="#A64242" stroke-width="1" opacity="0.4"/></svg>
-        <span class="font-mono text-[10px] text-secondary">SIBLING NOTES</span>
+        <span class="font-mono text-[10px] text-secondary">EVIDENCE ROUTE · ARROW POINTS TO CHILD</span>
       </div>
       <div class="flex items-center gap-2">
         <div class="w-4 h-4 rounded-full bg-accent border-2 border-background"></div>
@@ -365,6 +402,27 @@
           <label for="evidence-content" class="font-mono text-xs text-secondary">FIELD NOTES</label>
           <textarea id="evidence-content" bind:value={formContent} rows="5" placeholder="Observations, leads, suspects..." class="w-full bg-background border border-border text-sm rounded-sm px-3 py-2 focus:outline-none focus:border-accent text-primary resize-none"></textarea>
         </div>
+        <fieldset class="space-y-2">
+          <legend class="font-mono text-xs text-secondary">SUPPORTED BY · SELECT PARENT EVIDENCE</legend>
+          {#if boardNotes.filter(canBeParent).length === 0}
+            <p class="text-xs text-secondary bg-background border border-border rounded-sm px-3 py-2">No other evidence available yet. Save this evidence first to use it in a route.</p>
+          {:else}
+            <div class="max-h-36 overflow-y-auto space-y-1 bg-background border border-border rounded-sm p-2">
+              {#each boardNotes.filter(canBeParent) as parent}
+                <label class="flex items-center gap-2 px-2 py-1.5 rounded-sm hover:bg-surface text-sm text-primary cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formParentIds.includes(parent.id)}
+                    on:change={(event) => toggleParent(parent.id, event)}
+                    class="accent-[#A64242]"
+                  />
+                  <span class="font-mono text-[10px] text-accent">{parent.title}</span>
+                </label>
+              {/each}
+            </div>
+          {/if}
+          <p class="text-[10px] text-secondary">Select multiple evidence items to create multiple routes. Evidence without a parent connects directly to the case.</p>
+        </fieldset>
         <div class="space-y-1">
           <span class="font-mono text-xs text-secondary">CASE DOSSIER</span>
           <p class="bg-background border border-border text-sm rounded-sm px-3 py-2 text-primary">[{caseItem.caseNumber}] {caseItem.title}</p>

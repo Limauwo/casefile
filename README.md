@@ -7,7 +7,7 @@
 *   **Command Center**: A sleek, intelligence-terminal-styled dashboard providing a high-level overview of active cases, metrics, and recent system activity.
 *   **Core Task Management**: Create, edit, and organize cases with priorities (Low, Medium, High, Critical) and statuses (Open, In Progress, Closed). Cases automatically receive a unique identifier (e.g., `CASE-042`).
 *   **Case Dossiers**: Dedicated detail pages for each case, showing metadata, an isolated activity log, and case-specific evidence notes.
-*   **Evidence Board**: A dedicated visual matrix for each case, with case-specific notes and independently arranged evidence.
+*   **Evidence Board**: A dedicated visual matrix for each case, with case-specific notes, draggable evidence routes, and support for multiple parent evidence items.
 *   **System Activity Log**: Automatically tracks and audits all creations, modifications, and deletions within the system securely.
 *   **Persistent Storage**: Operates entirely locally in your browser. All cases, notes, and activity logs are persisted via `localStorage` so data remains even after refreshes.
 *   **Investigation Search**: Contextual search functionality capable of securely scanning through case files and notes simultaneously.

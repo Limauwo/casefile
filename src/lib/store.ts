@@ -31,6 +31,7 @@ export interface Note {
   title: string;
   content: string;
   relatedCaseId?: string;
+  parentNoteIds?: string[];
   createdAt: string;
   updatedAt: string;
   positionX: number;
@@ -213,7 +214,12 @@ export function deleteNote(id: string) {
   notes.update((items: Note[]) => {
     const n = items.find((x: Note) => x.id === id);
     if (n) noteTitle = n.title;
-    return items.filter((x: Note) => x.id !== id);
+    return items
+      .filter((x: Note) => x.id !== id)
+      .map((x: Note) => ({
+        ...x,
+        parentNoteIds: x.parentNoteIds?.filter(parentId => parentId !== id)
+      }));
   });
   logActivity('delete', `Deleted intelligence note: ${noteTitle}`);
 }
