@@ -3,7 +3,7 @@
   import { cases, notes, isInitialized, type Note, type Case, addNote, updateNote, deleteNote } from '$lib/store';
   import NoteEditor from '$lib/NoteEditor.svelte';
   import { formatNoteContent } from '$lib/noteFormatting';
-  import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft } from 'lucide-svelte';
+  import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft, Eye } from 'lucide-svelte';
   import { onDestroy } from 'svelte';
 
   $: caseId = $page.params.id ?? '';
@@ -105,6 +105,19 @@
   let formContent = '';
   let formParentIds: string[] = [];
   let formError = '';
+  let previewNote: Note | null = null;
+
+  function showNotePreview(note: Note) {
+    previewNote = note;
+  }
+
+  function closeNotePreview() {
+    previewNote = null;
+  }
+
+  function handlePreviewKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') closeNotePreview();
+  }
 
   function openModal(n?: Note) {
     if (n) {
@@ -179,6 +192,8 @@
     return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
 </script>
+
+<svelte:window on:keydown={handlePreviewKeydown} />
 
 {#if !$isInitialized}
   <div class="flex-1 flex flex-col items-center justify-center text-secondary animate-pulse space-y-4">
@@ -327,9 +342,19 @@
             <!-- Actions -->
             <button
               on:click|stopPropagation={() => openModal(note)}
-              class="absolute top-1.5 right-1.5 text-[#111315]/30 hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity bg-[#e9e5d0] rounded p-0.5"
+              class="absolute top-1.5 right-1.5 text-[#111315]/50 hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity bg-[#e9e5d0] rounded p-0.5"
+              aria-label="Edit {note.title}"
+              title="Edit evidence"
             >
               <Edit3 size={12} />
+            </button>
+            <button
+              on:click|stopPropagation={() => showNotePreview(note)}
+              class="absolute top-1.5 right-7 text-[#111315]/50 hover:text-accent opacity-0 group-hover:opacity-100 transition-opacity bg-[#e9e5d0] rounded p-0.5"
+              aria-label="Read full note: {note.title}"
+              title="Read full note"
+            >
+              <Eye size={12} />
             </button>
 
             <h3 class="font-bold text-[#1a1a1a] text-xs mb-1.5 pr-5 font-mono uppercase tracking-wide">{note.title}</h3>
@@ -378,6 +403,39 @@
       </div>
     </div>
 </div>
+{/if}
+
+{#if previewNote}
+  <div class="fixed inset-0 bg-background/80 backdrop-blur-sm z-[55] flex items-center justify-center p-4">
+    <section
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="evidence-preview-title"
+      class="bg-surface border border-border w-full max-w-2xl max-h-[85vh] rounded-sm shadow-2xl flex flex-col"
+    >
+      <header class="flex justify-between items-center p-4 border-b border-border bg-background/50 shrink-0">
+        <div class="min-w-0">
+          <p class="font-mono text-[10px] text-accent">{caseItem?.caseNumber} · FIELD NOTES</p>
+          <h2 id="evidence-preview-title" class="font-mono font-bold text-lg text-primary truncate">{previewNote.title}</h2>
+        </div>
+        <button
+          on:click={closeNotePreview}
+          class="text-secondary hover:text-primary transition-colors ml-3"
+          aria-label="Close full note"
+        >
+          <X size={20} />
+        </button>
+      </header>
+      <div class="p-6 overflow-y-auto text-primary text-sm leading-relaxed break-words">
+        {@html formatNoteContent(previewNote.content || '—')}
+      </div>
+      <footer class="p-4 border-t border-border bg-background/50 flex justify-end shrink-0">
+        <button on:click={closeNotePreview} class="bg-accent hover:bg-accent/90 text-primary px-4 py-2 rounded-sm font-mono text-xs transition-colors">
+          CLOSE
+        </button>
+      </footer>
+    </section>
+  </div>
 {/if}
 
 <!-- Note Modal -->
