@@ -9,5 +9,8 @@
 	],
 	"/evidence-board": [
 		"src/routes/+layout.ts"
+	],
+	"/evidence-board/[id]": [
+		"src/routes/+layout.ts"
 	]
 }

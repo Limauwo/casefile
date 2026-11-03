@@ -48,7 +48,7 @@
           </a>
         </li>
         <li>
-          <a href="/evidence-board" class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {currentPath === '/evidence-board' ? 'bg-border text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-border/50'}">
+          <a href="/evidence-board" class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {currentPath.startsWith('/evidence-board') ? 'bg-border text-primary font-medium' : 'text-secondary hover:text-primary hover:bg-border/50'}">
             <Map size={18} />
             Evidence Board
           </a>
@@ -156,7 +156,7 @@
                 </a>
               </li>
               <li>
-                <a href="/evidence-board" on:click={() => showMobileMenu = false} class="flex items-center gap-3 px-3 py-2 text-sm {currentPath === '/evidence-board' ? 'bg-border text-primary' : 'text-secondary'}">
+                <a href="/evidence-board" on:click={() => showMobileMenu = false} class="flex items-center gap-3 px-3 py-2 text-sm {currentPath.startsWith('/evidence-board') ? 'bg-border text-primary' : 'text-secondary'}">
                   <Map size={18} /> Evidence Board
                 </a>
               </li>

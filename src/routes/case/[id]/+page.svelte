@@ -3,7 +3,7 @@
   import { cases, activities, notes, isInitialized, type Case, type Priority, type Status, updateCase, addNote, updateNote, deleteNote } from '$lib/store';
   import { FileText, ArrowLeft, Clock, Activity as ActivityIcon, Edit3, Trash2, Plus, X, AlertTriangle, CheckCircle, Map } from 'lucide-svelte';
 
-  $: caseId = $page.params.id;
+  $: caseId = $page.params.id ?? '';
   $: caseItem = $cases.find(c => c.id === caseId) as Case | undefined;
   $: caseActivities = $activities
     .filter(a => a.relatedCaseId === caseId)
@@ -211,7 +211,7 @@
             <span class="text-xs font-normal text-border bg-border/30 px-1.5 rounded">{caseNotes.length}</span>
           </h2>
           <div class="flex gap-3">
-            <a href="/evidence-board" class="text-xs font-mono text-secondary hover:text-accent flex items-center gap-1 transition-colors">
+            <a href="/evidence-board/{caseId}" class="text-xs font-mono text-secondary hover:text-accent flex items-center gap-1 transition-colors">
               <Map size={12} /> VIEW ON BOARD
             </a>
             <button on:click={() => openNoteModal()} class="text-xs font-mono text-accent hover:underline flex items-center gap-1">
