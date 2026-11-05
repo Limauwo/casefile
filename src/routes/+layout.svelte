@@ -19,6 +19,7 @@
     filterPriority,
     clearAllData,
     initializeStore,
+    type Status,
   } from "$lib/store";
   import { onMount } from "svelte";
   import { page } from "$app/stores";
@@ -29,8 +30,8 @@
   let showMobileMenu = false;
   let showDesktopSidebar = true;
 
-  function filterAndGo(status: string) {
-    $filterStatus = status as any;
+  function filterAndGo(status: Status | "all") {
+    $filterStatus = status;
     goto("/");
     showMobileMenu = false;
   }
@@ -68,8 +69,10 @@
         <li>
           <a
             href="/"
+            on:click={() => ($filterStatus = "all")}
+            aria-current={currentPath === "/" && $filterStatus === "all" ? "page" : undefined}
             class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {currentPath ===
-            '/'
+            '/' && $filterStatus === 'all'
               ? 'bg-border text-primary font-medium'
               : 'text-secondary hover:text-primary hover:bg-border/50'}"
           >
@@ -98,20 +101,22 @@
           </p>
         </li>
         <li>
-          <a
-            href="/investigations/open"
+          <button
+            on:click={() => filterAndGo("open")}
+            aria-current={currentPath === "/" && $filterStatus === "open" ? "page" : undefined}
             class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {currentPath ===
-            '/investigations/open'
+            '/' && $filterStatus === 'open'
               ? 'bg-border text-primary font-medium'
               : 'text-secondary hover:text-primary hover:bg-border/50'}"
           >
             <FolderOpen size={18} />
             Open Cases
-          </a>
+          </button>
         </li>
         <li>
           <button
             on:click={() => filterAndGo("in_progress")}
+            aria-current={currentPath === "/" && $filterStatus === "in_progress" ? "page" : undefined}
             class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {$filterStatus ===
               'in_progress' && currentPath === '/'
               ? 'bg-border text-primary font-medium'
@@ -124,6 +129,7 @@
         <li>
           <button
             on:click={() => filterAndGo("closed")}
+            aria-current={currentPath === "/" && $filterStatus === "closed" ? "page" : undefined}
             class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {$filterStatus ===
               'closed' && currentPath === '/'
               ? 'bg-border text-primary font-medium'
@@ -253,9 +259,13 @@
               <li>
                 <a
                   href="/"
-                  on:click={() => (showMobileMenu = false)}
+                  on:click={() => {
+                    $filterStatus = "all";
+                    showMobileMenu = false;
+                  }}
+                  aria-current={currentPath === "/" && $filterStatus === "all" ? "page" : undefined}
                   class="flex items-center gap-3 px-3 py-2 text-sm {currentPath ===
-                  '/'
+                  '/' && $filterStatus === 'all'
                     ? 'bg-border text-primary'
                     : 'text-secondary'}"
                 >
@@ -284,32 +294,29 @@
               </li>
               <li>
                 <button
-                  on:click={() => filterAndGo("all")}
-                  class="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary"
-                  ><LayoutDashboard size={18} /> All Cases</button
-                >
-              </li>
-              <li>
-                <a
-                  href="/investigations/open"
-                  on:click={() => (showMobileMenu = false)}
-                  class="flex items-center gap-3 px-3 py-2 text-sm {currentPath ===
-                  '/investigations/open'
+                  on:click={() => filterAndGo("open")}
+                  aria-current={currentPath === "/" && $filterStatus === "open" ? "page" : undefined}
+                  class="w-full flex items-center gap-3 px-3 py-2 text-sm {currentPath ===
+                  '/' && $filterStatus === 'open'
                     ? 'bg-border text-primary'
-                    : 'text-secondary'}"><FolderOpen size={18} /> Open Cases</a
+                    : 'text-secondary'}"
                 >
+                  <FolderOpen size={18} /> Open Cases
+                </button>
               </li>
               <li>
                 <button
                   on:click={() => filterAndGo("in_progress")}
-                  class="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary"
+                  aria-current={currentPath === "/" && $filterStatus === "in_progress" ? "page" : undefined}
+                  class="w-full flex items-center gap-3 px-3 py-2 text-sm {currentPath === '/' && $filterStatus === 'in_progress' ? 'bg-border text-primary' : 'text-secondary'}"
                   ><Clock size={18} /> In Progress</button
                 >
               </li>
               <li>
                 <button
                   on:click={() => filterAndGo("closed")}
-                  class="w-full flex items-center gap-3 px-3 py-2 text-sm text-secondary"
+                aria-current={currentPath === "/" && $filterStatus === "closed" ? "page" : undefined}
+                class="w-full flex items-center gap-3 px-3 py-2 text-sm {currentPath === '/' && $filterStatus === 'closed' ? 'bg-border text-primary' : 'text-secondary'}"
                   ><FolderArchive size={18} /> Closed</button
                 >
               </li>
