@@ -4,7 +4,7 @@
   import NoteEditor from '$lib/NoteEditor.svelte';
   import { formatNoteContent } from '$lib/noteFormatting';
   import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft, Eye, ZoomIn, ZoomOut } from 'lucide-svelte';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount, tick } from 'svelte';
 
   $: caseId = $page.params.id ?? '';
   $: caseItem = $cases.find(c => c.id === caseId) as Case | undefined;
@@ -15,21 +15,38 @@
   const HUB_W = 140;
   const HUB_H = 70;
   const GRID_SIZE = 40;
+  const WORLD_SIZE = 20000;
+  const WORLD_ORIGIN = WORLD_SIZE / 2;
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 2;
+  type DragTarget = { kind: 'note'; id: string } | { kind: 'hub'; id: string };
+  let activeTool: 'select' | 'hand' = 'select';
+  let selectedTarget: DragTarget | null = null;
+  let isPanning = false;
+  let panLastX = 0;
+  let panLastY = 0;
   let zoom = 1;
   let snapToGridEnabled = true;
+  let boardCanvas: HTMLDivElement;
 
-  function adjustZoom(amount: number) {
-    zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round((zoom + amount) * 10) / 10));
+  async function adjustZoom(amount: number) {
+    const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round((zoom + amount) * 10) / 10));
+    if (nextZoom === zoom) return;
+
+    const centerX = (boardCanvas.scrollLeft + boardCanvas.clientWidth / 2) / zoom;
+    const centerY = (boardCanvas.scrollTop + boardCanvas.clientHeight / 2) / zoom;
+    zoom = nextZoom;
+    await tick();
+    boardCanvas.scrollLeft = centerX * zoom - boardCanvas.clientWidth / 2;
+    boardCanvas.scrollTop = centerY * zoom - boardCanvas.clientHeight / 2;
   }
 
   function snapToGrid(value: number): number {
-    return Math.max(0, Math.round(value / GRID_SIZE) * GRID_SIZE);
+    return Math.round(value / GRID_SIZE) * GRID_SIZE;
   }
 
   function getDragPosition(value: number): number {
-    return snapToGridEnabled ? snapToGrid(value) : Math.max(0, value);
+    return snapToGridEnabled ? snapToGrid(value) : value;
   }
 
   // Keep a separate hub position for each case while navigating between boards.
@@ -48,13 +65,13 @@
   $: activeCases = caseItem ? [caseItem] : [];
 
   // --- Dragging State ---
-  type DragTarget = { kind: 'note'; id: string } | { kind: 'hub'; id: string };
   let dragging: DragTarget | null = null;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
 
   function startDragNote(e: MouseEvent, note: Note) {
-    if ((e.target as HTMLElement).closest('button')) return;
+    if (activeTool !== 'select' || (e.target as HTMLElement).closest('button')) return;
+    selectedTarget = { kind: 'note', id: note.id };
     dragging = { kind: 'note', id: note.id };
     const el = document.getElementById(`note-${note.id}`);
     if (el) {
@@ -68,6 +85,8 @@
   }
 
   function startDragHub(e: MouseEvent, caseId: string) {
+    if (activeTool !== 'select' || (e.target as HTMLElement).closest('button, a')) return;
+    selectedTarget = { kind: 'hub', id: caseId };
     dragging = { kind: 'hub', id: caseId };
     const el = document.getElementById(`hub-${caseId}`);
     if (el) {
@@ -85,8 +104,8 @@
     const board = document.getElementById('evidence-board-canvas');
     if (!board) return;
     const rect = board.getBoundingClientRect();
-    const x = getDragPosition((e.clientX - rect.left - board.clientLeft + board.scrollLeft - dragOffsetX) / zoom);
-    const y = getDragPosition((e.clientY - rect.top - board.clientTop + board.scrollTop - dragOffsetY) / zoom);
+    const x = getDragPosition((e.clientX - rect.left - board.clientLeft + board.scrollLeft - dragOffsetX) / zoom - WORLD_ORIGIN);
+    const y = getDragPosition((e.clientY - rect.top - board.clientTop + board.scrollTop - dragOffsetY) / zoom - WORLD_ORIGIN);
 
     if (dragging.kind === 'note') {
       notes.update(ns => ns.map(n => n.id === (dragging as DragTarget & {kind:'note'}).id ? { ...n, positionX: x, positionY: y } : n));
@@ -101,9 +120,49 @@
     window.removeEventListener('mouseup', endDrag);
   }
 
+  function startPan(e: MouseEvent) {
+    if (e.button !== 0 || (e.target as HTMLElement).closest('button, a, input, [data-board-controls]')) return;
+    if (activeTool === 'select') {
+      if (!(e.target as HTMLElement).closest('[id^="note-"], [id^="hub-"]')) {
+        selectedTarget = null;
+      }
+      return;
+    }
+
+    isPanning = true;
+    panLastX = e.clientX;
+    panLastY = e.clientY;
+    window.addEventListener('mousemove', onPan);
+    window.addEventListener('mouseup', endPan);
+    e.preventDefault();
+  }
+
+  function onPan(e: MouseEvent) {
+    if (!isPanning) return;
+    const board = document.getElementById('evidence-board-canvas');
+    if (!board) return;
+    board.scrollLeft -= e.clientX - panLastX;
+    board.scrollTop -= e.clientY - panLastY;
+    panLastX = e.clientX;
+    panLastY = e.clientY;
+  }
+
+  function endPan() {
+    isPanning = false;
+    window.removeEventListener('mousemove', onPan);
+    window.removeEventListener('mouseup', endPan);
+  }
+
   onDestroy(() => {
     window.removeEventListener('mousemove', onDrag);
     window.removeEventListener('mouseup', endDrag);
+    window.removeEventListener('mousemove', onPan);
+    window.removeEventListener('mouseup', endPan);
+  });
+
+  onMount(() => {
+    boardCanvas.scrollLeft = WORLD_ORIGIN * zoom - boardCanvas.clientWidth / 2;
+    boardCanvas.scrollTop = WORLD_ORIGIN * zoom - boardCanvas.clientHeight / 2;
   });
 
   // Build SVG thread paths using cubic bezier curves
@@ -260,15 +319,63 @@
   </div>
 
     <!-- Board Canvas -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
       id="evidence-board-canvas"
-      class="flex-1 relative overflow-auto border border-border rounded-sm"
+      bind:this={boardCanvas}
+      class="flex-1 relative overflow-auto border border-border rounded-sm {activeTool === 'hand' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}"
       style="min-height: 600px;"
+      on:mousedown={startPan}
     >
-      <div
-        class="relative origin-top-left"
-        style="width: {100 / zoom}%; height: {100 / zoom}%; min-width: {100 / zoom}%; min-height: {100 / zoom}%; transform: scale({zoom}); background-color: #111315; background-image: linear-gradient(to right, #30353a 1px, transparent 1px), linear-gradient(to bottom, #30353a 1px, transparent 1px); background-size: {GRID_SIZE}px {GRID_SIZE}px;"
-      >
+      <div class="sticky top-0 z-50 h-0 pointer-events-none">
+        <div data-board-controls class="absolute top-3 left-3 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg pointer-events-auto">
+          <button
+            on:click={() => activeTool = 'select'}
+            aria-label="Select tool"
+            aria-pressed={activeTool === 'select'}
+            title="Select and move evidence"
+            class="px-2 py-1 rounded-sm font-mono text-[10px] transition-colors {activeTool === 'select' ? 'bg-accent text-primary' : 'text-secondary hover:text-primary'}"
+          >
+            SELECT
+          </button>
+          <button
+            on:click={() => activeTool = 'hand'}
+            aria-label="Hand tool"
+            aria-pressed={activeTool === 'hand'}
+            title="Pan the board"
+            class="px-2 py-1 rounded-sm font-mono text-[10px] transition-colors {activeTool === 'hand' ? 'bg-accent text-primary' : 'text-secondary hover:text-primary'}"
+          >
+            HAND
+          </button>
+        </div>
+        <div data-board-controls class="absolute top-3 right-3 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg pointer-events-auto">
+          <button
+            on:click={() => adjustZoom(-0.1)}
+            disabled={zoom <= MIN_ZOOM}
+            aria-label="Zoom out"
+            title="Zoom out"
+            class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ZoomOut size={16} />
+          </button>
+          <span class="min-w-[3.5rem] text-center font-mono text-[10px] text-primary">{Math.round(zoom * 100)}%</span>
+          <button
+            on:click={() => adjustZoom(0.1)}
+            disabled={zoom >= MAX_ZOOM}
+            aria-label="Zoom in"
+            title="Zoom in"
+            class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            <ZoomIn size={16} />
+          </button>
+        </div>
+      </div>
+
+      <div class="relative shrink-0" style="width: {WORLD_SIZE * zoom}px; height: {WORLD_SIZE * zoom}px;">
+        <div
+          class="absolute top-0 left-0 origin-top-left"
+          style="width: {WORLD_SIZE}px; height: {WORLD_SIZE}px; transform: scale({zoom}); background-color: #111315; background-image: linear-gradient(to right, #30353a 1px, transparent 1px), linear-gradient(to bottom, #30353a 1px, transparent 1px); background-size: {GRID_SIZE}px {GRID_SIZE}px;"
+        >
       <!-- SVG Thread Overlay -->
       <svg class="absolute inset-0 pointer-events-none z-10" style="width: 100%; height: 100%; overflow: visible;">
         <defs>
@@ -285,10 +392,10 @@
         {#each boardNotes.filter(note => !note.parentNoteIds?.some(id => boardNotes.some(parent => parent.id === id))) as note}
           {#if hubPositions[caseId]}
             {@const hub = hubPositions[caseId]}
-            {@const nx = note.positionX + NOTE_W / 2}
-            {@const ny = note.positionY}
-            {@const hx = hub.x + HUB_W / 2}
-            {@const hy = hub.y + HUB_H}
+            {@const nx = WORLD_ORIGIN + note.positionX + NOTE_W / 2}
+            {@const ny = WORLD_ORIGIN + note.positionY}
+            {@const hx = WORLD_ORIGIN + hub.x + HUB_W / 2}
+            {@const hy = WORLD_ORIGIN + hub.y + HUB_H}
             <path
               d={threadPath(hx, hy, nx, ny)}
               stroke="#A64242"
@@ -307,10 +414,10 @@
           {#each child.parentNoteIds ?? [] as parentId}
             {@const parent = boardNotes.find(note => note.id === parentId)}
             {#if parent}
-              {@const x1 = parent.positionX + NOTE_W / 2}
-              {@const y1 = parent.positionY + NOTE_H / 2}
-              {@const x2 = child.positionX + NOTE_W / 2}
-              {@const y2 = child.positionY + NOTE_H / 2}
+              {@const x1 = WORLD_ORIGIN + parent.positionX + NOTE_W / 2}
+              {@const y1 = WORLD_ORIGIN + parent.positionY + NOTE_H / 2}
+              {@const x2 = WORLD_ORIGIN + child.positionX + NOTE_W / 2}
+              {@const y2 = WORLD_ORIGIN + child.positionY + NOTE_H / 2}
               <path
                 d={threadPath(x1, y1, x2, y2)}
                 stroke="#A64242"
@@ -331,8 +438,8 @@
           <!-- svelte-ignore a11y-no-static-element-interactions -->
           <div
             id="hub-{c.id}"
-            class="absolute z-20 select-none cursor-move"
-            style="left: {hubPositions[c.id].x}px; top: {hubPositions[c.id].y}px; width: {HUB_W}px;"
+            class="absolute z-20 select-none {activeTool === 'select' ? 'cursor-move' : ''} {selectedTarget?.kind === 'hub' && selectedTarget.id === c.id ? 'ring-2 ring-accent ring-offset-2 ring-offset-[#111315]' : ''}"
+            style="left: {WORLD_ORIGIN + hubPositions[c.id].x}px; top: {WORLD_ORIGIN + hubPositions[c.id].y}px; width: {HUB_W}px;"
             on:mousedown={(e) => startDragHub(e, c.id)}
           >
             <div class="bg-background border-2 border-accent rounded-sm p-2 flex flex-col items-center text-center shadow-[0_0_20px_rgba(166,66,66,0.35)]">
@@ -358,8 +465,8 @@
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
           id="note-{note.id}"
-          class="absolute z-30 select-none cursor-move group"
-          style="left: {note.positionX}px; top: {note.positionY}px; width: {NOTE_W}px;"
+          class="absolute z-30 select-none group {activeTool === 'select' ? 'cursor-move' : ''} {selectedTarget?.kind === 'note' && selectedTarget.id === note.id ? 'ring-2 ring-accent ring-offset-2 ring-offset-[#111315]' : ''}"
+          style="left: {WORLD_ORIGIN + note.positionX}px; top: {WORLD_ORIGIN + note.positionY}px; width: {NOTE_W}px;"
           on:mousedown={(e) => startDragNote(e, note)}
         >
           <!-- Pin -->
@@ -419,29 +526,9 @@
           <p class="font-mono text-xs text-secondary mt-1">Add evidence to {caseItem.caseNumber} to build this case board</p>
         </div>
       {/if}
+        </div>
       </div>
 
-      <div class="absolute top-3 right-3 z-50 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg">
-        <button
-          on:click={() => adjustZoom(-0.1)}
-          disabled={zoom <= MIN_ZOOM}
-          aria-label="Zoom out"
-          title="Zoom out"
-          class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <ZoomOut size={16} />
-        </button>
-        <span class="min-w-[3.5rem] text-center font-mono text-[10px] text-primary">{Math.round(zoom * 100)}%</span>
-        <button
-          on:click={() => adjustZoom(0.1)}
-          disabled={zoom >= MAX_ZOOM}
-          aria-label="Zoom in"
-          title="Zoom in"
-          class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-        >
-          <ZoomIn size={16} />
-        </button>
-      </div>
     </div>
 
     <!-- Legend -->
