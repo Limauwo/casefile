@@ -1,6 +1,7 @@
 <script lang="ts">
   import { FileText, AlertCircle, CheckCircle, Clock, Plus, Activity, AlertTriangle, X, Trash2, FolderOpen } from 'lucide-svelte';
   import { cases, activities, isInitialized, searchQuery, filterStatus, filterPriority, addCase, updateCase, deleteCase, toggleCaseStatus, type Case, type Priority, type Status } from '$lib/store';
+  import { appPath } from '$lib/paths';
 
   // Derived state for metrics
   $: openCasesCount = $cases.filter((c: Case) => c.status === 'open').length;
@@ -210,7 +211,7 @@
               </div>
 
               <!-- Content -->
-              <a href="/case/{caseItem.id}" class="flex-1 min-w-0 block">
+              <a href={appPath(`/case/${caseItem.id}`)} class="flex-1 min-w-0 block">
                 <div class="flex justify-between items-start mb-1">
                   <div class="flex items-center gap-2">
                     <span class="font-mono text-xs font-bold px-1.5 py-0.5 bg-background border border-border rounded text-secondary">

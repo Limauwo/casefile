@@ -24,15 +24,20 @@
   import { onMount } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
+  import { base } from "$app/paths";
+  import { appPath } from "$lib/paths";
 
   $: currentPath = $page?.url?.pathname || "/";
+  $: routePath = base && currentPath.startsWith(base)
+    ? currentPath.slice(base.length) || "/"
+    : currentPath;
   let showSettingsModal = false;
   let showMobileMenu = false;
   let showDesktopSidebar = true;
 
   function filterAndGo(status: Status | "all") {
     $filterStatus = status;
-    goto("/");
+    goto(appPath("/"));
     showMobileMenu = false;
   }
 
@@ -41,12 +46,12 @@
   });
 
   $: breadcrumb = (() => {
-    if (currentPath === "/") return "command-center";
-    if (currentPath === "/evidence-board") return "evidence-board";
-    if (currentPath.startsWith("/case/")) return `dossier`;
-    if (currentPath === "/investigations/open")
+    if (routePath === "/") return "command-center";
+    if (routePath === "/evidence-board") return "evidence-board";
+    if (routePath.startsWith("/case/")) return `dossier`;
+    if (routePath === "/investigations/open")
       return "investigations / open-cases";
-    return currentPath.replace("/", "");
+    return routePath.replace("/", "");
   })();
 </script>
 
@@ -68,10 +73,10 @@
       <ul class="space-y-1 px-3">
         <li>
           <a
-            href="/"
+            href={appPath("/")}
             on:click={() => ($filterStatus = "all")}
-            aria-current={currentPath === "/" && $filterStatus === "all" ? "page" : undefined}
-            class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {currentPath ===
+            aria-current={routePath === "/" && $filterStatus === "all" ? "page" : undefined}
+            class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {routePath ===
             '/' && $filterStatus === 'all'
               ? 'bg-border text-primary font-medium'
               : 'text-secondary hover:text-primary hover:bg-border/50'}"
@@ -82,8 +87,8 @@
         </li>
         <li>
           <a
-            href="/evidence-board"
-            class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {currentPath.startsWith(
+            href={appPath("/evidence-board")}
+            class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {routePath.startsWith(
               '/evidence-board',
             )
               ? 'bg-border text-primary font-medium'
@@ -103,8 +108,8 @@
         <li>
           <button
             on:click={() => filterAndGo("open")}
-            aria-current={currentPath === "/" && $filterStatus === "open" ? "page" : undefined}
-            class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {currentPath ===
+            aria-current={routePath === "/" && $filterStatus === "open" ? "page" : undefined}
+            class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {routePath ===
             '/' && $filterStatus === 'open'
               ? 'bg-border text-primary font-medium'
               : 'text-secondary hover:text-primary hover:bg-border/50'}"
@@ -116,9 +121,9 @@
         <li>
           <button
             on:click={() => filterAndGo("in_progress")}
-            aria-current={currentPath === "/" && $filterStatus === "in_progress" ? "page" : undefined}
+            aria-current={routePath === "/" && $filterStatus === "in_progress" ? "page" : undefined}
             class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {$filterStatus ===
-              'in_progress' && currentPath === '/'
+              'in_progress' && routePath === '/'
               ? 'bg-border text-primary font-medium'
               : 'text-secondary hover:text-primary hover:bg-border/50'}"
           >
@@ -129,9 +134,9 @@
         <li>
           <button
             on:click={() => filterAndGo("closed")}
-            aria-current={currentPath === "/" && $filterStatus === "closed" ? "page" : undefined}
+            aria-current={routePath === "/" && $filterStatus === "closed" ? "page" : undefined}
             class="w-full flex items-center gap-3 px-3 py-2 rounded-sm text-sm {$filterStatus ===
-              'closed' && currentPath === '/'
+              'closed' && routePath === '/'
               ? 'bg-border text-primary font-medium'
               : 'text-secondary hover:text-primary hover:bg-border/50'}"
           >
@@ -258,13 +263,13 @@
             <ul class="space-y-1 px-3">
               <li>
                 <a
-                  href="/"
+                  href={appPath("/")}
                   on:click={() => {
                     $filterStatus = "all";
                     showMobileMenu = false;
                   }}
-                  aria-current={currentPath === "/" && $filterStatus === "all" ? "page" : undefined}
-                  class="flex items-center gap-3 px-3 py-2 text-sm {currentPath ===
+                  aria-current={routePath === "/" && $filterStatus === "all" ? "page" : undefined}
+                  class="flex items-center gap-3 px-3 py-2 text-sm {routePath ===
                   '/' && $filterStatus === 'all'
                     ? 'bg-border text-primary'
                     : 'text-secondary'}"
@@ -274,9 +279,9 @@
               </li>
               <li>
                 <a
-                  href="/evidence-board"
+                  href={appPath("/evidence-board")}
                   on:click={() => (showMobileMenu = false)}
-                  class="flex items-center gap-3 px-3 py-2 text-sm {currentPath.startsWith(
+                  class="flex items-center gap-3 px-3 py-2 text-sm {routePath.startsWith(
                     '/evidence-board',
                   )
                     ? 'bg-border text-primary'
@@ -295,8 +300,8 @@
               <li>
                 <button
                   on:click={() => filterAndGo("open")}
-                  aria-current={currentPath === "/" && $filterStatus === "open" ? "page" : undefined}
-                  class="w-full flex items-center gap-3 px-3 py-2 text-sm {currentPath ===
+                  aria-current={routePath === "/" && $filterStatus === "open" ? "page" : undefined}
+                  class="w-full flex items-center gap-3 px-3 py-2 text-sm {routePath ===
                   '/' && $filterStatus === 'open'
                     ? 'bg-border text-primary'
                     : 'text-secondary'}"
@@ -307,16 +312,16 @@
               <li>
                 <button
                   on:click={() => filterAndGo("in_progress")}
-                  aria-current={currentPath === "/" && $filterStatus === "in_progress" ? "page" : undefined}
-                  class="w-full flex items-center gap-3 px-3 py-2 text-sm {currentPath === '/' && $filterStatus === 'in_progress' ? 'bg-border text-primary' : 'text-secondary'}"
+                  aria-current={routePath === "/" && $filterStatus === "in_progress" ? "page" : undefined}
+                  class="w-full flex items-center gap-3 px-3 py-2 text-sm {routePath === '/' && $filterStatus === 'in_progress' ? 'bg-border text-primary' : 'text-secondary'}"
                   ><Clock size={18} /> In Progress</button
                 >
               </li>
               <li>
                 <button
                   on:click={() => filterAndGo("closed")}
-                aria-current={currentPath === "/" && $filterStatus === "closed" ? "page" : undefined}
-                class="w-full flex items-center gap-3 px-3 py-2 text-sm {currentPath === '/' && $filterStatus === 'closed' ? 'bg-border text-primary' : 'text-secondary'}"
+                aria-current={routePath === "/" && $filterStatus === "closed" ? "page" : undefined}
+                class="w-full flex items-center gap-3 px-3 py-2 text-sm {routePath === '/' && $filterStatus === 'closed' ? 'bg-border text-primary' : 'text-secondary'}"
                   ><FolderArchive size={18} /> Closed</button
                 >
               </li>

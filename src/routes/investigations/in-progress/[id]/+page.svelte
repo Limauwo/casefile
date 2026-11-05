@@ -3,6 +3,7 @@
   import { cases, activities, notes, isInitialized, type Activity, type Case } from '$lib/store';
   import { formatNoteContent } from '$lib/noteFormatting';
   import { Activity as ActivityIcon, AlertTriangle, ArrowLeft, Clock, FileText, Map } from 'lucide-svelte';
+  import { appPath } from '$lib/paths';
 
   $: caseId = $page.params.id ?? '';
   $: caseItem = $cases.find(item => item.id === caseId) as Case | undefined;
@@ -62,13 +63,13 @@
     <AlertTriangle size={48} class="text-accent mx-auto" />
     <h2 class="text-xl text-primary font-mono font-bold">CASE NOT FOUND</h2>
     <p class="text-secondary text-sm">The requested investigation does not exist or has been removed.</p>
-    <a href="/" class="inline-flex items-center gap-2 text-accent hover:underline font-mono text-xs border border-accent/30 px-4 py-2 rounded-sm">
+    <a href={appPath("/")} class="inline-flex items-center gap-2 text-accent hover:underline font-mono text-xs border border-accent/30 px-4 py-2 rounded-sm">
       <ArrowLeft size={14} /> RETURN TO COMMAND CENTER
     </a>
   </div>
 {:else}
   <div class="max-w-6xl mx-auto space-y-6 pb-12">
-    <a href="/case/{caseItem.id}" class="inline-flex items-center gap-2 text-secondary hover:text-primary font-mono text-xs transition-colors">
+    <a href={appPath(`/case/${caseItem.id}`)} class="inline-flex items-center gap-2 text-secondary hover:text-primary font-mono text-xs transition-colors">
       <ArrowLeft size={14} /> BACK TO CASE DOSSIER
     </a>
 
@@ -82,7 +83,7 @@
         </div>
         <h1 class="text-3xl font-bold tracking-tight text-primary">{caseItem.title}</h1>
       </div>
-      <a href="/evidence-board/{caseItem.id}" class="inline-flex items-center justify-center gap-2 text-secondary hover:text-accent border border-border hover:border-accent px-3 py-2 rounded-sm font-mono text-xs transition-colors shrink-0">
+      <a href={appPath(`/evidence-board/${caseItem.id}`)} class="inline-flex items-center justify-center gap-2 text-secondary hover:text-accent border border-border hover:border-accent px-3 py-2 rounded-sm font-mono text-xs transition-colors shrink-0">
         <Map size={14} /> OPEN EVIDENCE BOARD
       </a>
     </header>

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cases, isInitialized, searchQuery, filterPriority, toggleCaseStatus, type Case } from '$lib/store';
   import { AlertTriangle, Clock, FileText, FolderOpen, Search } from 'lucide-svelte';
+  import { appPath } from '$lib/paths';
 
   $: openCases = $cases.filter((caseItem: Case) => {
     if (caseItem.status !== 'open') return false;
@@ -75,7 +76,7 @@
             on:click={() => toggleCaseStatus(caseItem.id)}
           ></button>
 
-          <a href="/case/{caseItem.id}" class="flex-1 min-w-0">
+          <a href={appPath(`/case/${caseItem.id}`)} class="flex-1 min-w-0">
             <div class="flex flex-wrap items-center gap-2 mb-1">
               <span class="font-mono text-xs font-bold px-1.5 py-0.5 bg-background border border-border rounded text-secondary">
                 {caseItem.caseNumber}

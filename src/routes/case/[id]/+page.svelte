@@ -3,6 +3,7 @@
   import { cases, activities, notes, isInitialized, type Case, type Priority, type Status, updateCase, addNote, updateNote, deleteNote } from '$lib/store';
   import NoteEditor from '$lib/NoteEditor.svelte';
   import { formatNoteContent, getNoteContentBlocks, toggleChecklistItem } from '$lib/noteFormatting';
+  import { appPath } from '$lib/paths';
   import { FileText, ArrowLeft, Clock, Activity as ActivityIcon, Edit3, Trash2, Plus, X, AlertTriangle, CheckCircle, Map } from 'lucide-svelte';
 
   $: caseId = $page.params.id ?? '';
@@ -119,13 +120,13 @@
     <AlertTriangle size={48} class="text-accent mx-auto" />
     <h2 class="text-xl text-primary font-mono font-bold">CASE NOT FOUND</h2>
     <p class="text-secondary text-sm">The requested case file does not exist or has been expunged from the system.</p>
-    <a href="/" class="inline-block text-accent hover:underline font-mono text-xs border border-accent/30 px-4 py-2 rounded-sm">← RETURN TO COMMAND CENTER</a>
+    <a href={appPath("/")} class="inline-block text-accent hover:underline font-mono text-xs border border-accent/30 px-4 py-2 rounded-sm">← RETURN TO COMMAND CENTER</a>
   </div>
 {:else}
   <div class="max-w-4xl mx-auto space-y-8 pb-16">
 
     <!-- Back nav -->
-    <a href="/" class="inline-flex items-center gap-2 text-secondary hover:text-primary font-mono text-xs transition-colors">
+    <a href={appPath("/")} class="inline-flex items-center gap-2 text-secondary hover:text-primary font-mono text-xs transition-colors">
       <ArrowLeft size={14} /> BACK TO COMMAND CENTER
     </a>
 
@@ -183,7 +184,7 @@
         {#if !isEditing}
           <div class="shrink-0 flex flex-col sm:flex-row gap-2">
             {#if caseItem.status === 'in_progress'}
-              <a href="/investigations/in-progress/{caseItem.id}" class="flex items-center justify-center gap-1.5 text-accent hover:bg-accent/10 border border-accent/40 px-3 py-1.5 rounded-sm font-mono text-xs transition-colors">
+              <a href={appPath(`/investigations/in-progress/${caseItem.id}`)} class="flex items-center justify-center gap-1.5 text-accent hover:bg-accent/10 border border-accent/40 px-3 py-1.5 rounded-sm font-mono text-xs transition-colors">
                 <ActivityIcon size={13} /> OPEN WORKSPACE
               </a>
             {/if}
@@ -226,7 +227,7 @@
             <span class="text-xs font-normal text-border bg-border/30 px-1.5 rounded">{caseNotes.length}</span>
           </h2>
           <div class="flex gap-3">
-            <a href="/evidence-board/{caseId}" class="text-xs font-mono text-secondary hover:text-accent flex items-center gap-1 transition-colors">
+            <a href={appPath(`/evidence-board/${caseId}`)} class="text-xs font-mono text-secondary hover:text-accent flex items-center gap-1 transition-colors">
               <Map size={12} /> VIEW ON BOARD
             </a>
             <button on:click={() => openNoteModal()} class="text-xs font-mono text-accent hover:underline flex items-center gap-1">

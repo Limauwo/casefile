@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cases, notes, isInitialized, searchQuery } from '$lib/store';
   import { ArrowRight, FileText, Map } from 'lucide-svelte';
+  import { appPath } from '$lib/paths';
 
   $: filteredCases = $cases.filter(c => {
     const query = $searchQuery.trim().toLowerCase();
@@ -37,7 +38,7 @@
       {#each filteredCases as caseItem (caseItem.id)}
         {@const caseNotes = $notes.filter(note => note.relatedCaseId === caseItem.id)}
         <a
-          href="/evidence-board/{caseItem.id}"
+          href={appPath(`/evidence-board/${caseItem.id}`)}
           class="group bg-surface border border-border hover:border-accent/60 rounded-sm p-5 transition-colors"
         >
           <div class="flex justify-between items-start gap-3">

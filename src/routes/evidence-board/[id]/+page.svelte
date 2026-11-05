@@ -5,6 +5,7 @@
   import EvidenceBoardMinimap from '$lib/EvidenceBoardMinimap.svelte';
   import type { MinimapItem } from '$lib/evidenceBoardMinimap';
   import { formatNoteContent, getNoteContentBlocks, toggleChecklistItem } from '$lib/noteFormatting';
+  import { appPath } from '$lib/paths';
   import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft, Eye, ZoomIn, ZoomOut } from 'lucide-svelte';
   import { onDestroy } from 'svelte';
 
@@ -658,7 +659,7 @@
   <div class="p-8 text-center space-y-4">
     <h2 class="text-xl text-primary font-mono font-bold">CASE NOT FOUND</h2>
     <p class="text-secondary text-sm">This evidence board is not attached to an existing case.</p>
-    <a href="/evidence-board" class="inline-flex items-center gap-2 text-accent hover:underline font-mono text-xs">
+    <a href={appPath("/evidence-board")} class="inline-flex items-center gap-2 text-accent hover:underline font-mono text-xs">
       <ArrowLeft size={14} /> ALL EVIDENCE BOARDS
     </a>
   </div>
@@ -667,7 +668,7 @@
   <!-- Header -->
   <div class="flex justify-between items-end border-b border-border pb-3 shrink-0 px-1 mb-2">
     <div>
-      <a href="/evidence-board" class="inline-flex items-center gap-1 text-secondary hover:text-accent font-mono text-[10px] mb-1">
+      <a href={appPath("/evidence-board")} class="inline-flex items-center gap-1 text-secondary hover:text-accent font-mono text-[10px] mb-1">
         <ArrowLeft size={12} /> ALL EVIDENCE BOARDS
       </a>
       <h1 class="text-2xl font-bold tracking-tight flex items-center gap-3">
@@ -834,7 +835,7 @@
               <Target size={16} class="text-accent mb-1" />
               <span class="font-bold text-xs text-primary truncate w-full" title={c.title}>{c.title}</span>
               <a
-                href="/case/{c.id}"
+                href={appPath(`/case/${c.id}`)}
                 on:click|stopPropagation
                 class="font-mono text-[11px] font-bold text-accent hover:underline leading-tight mt-1"
               >
