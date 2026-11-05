@@ -175,9 +175,16 @@
         </div>
 
         {#if !isEditing}
-          <button on:click={startEdit} class="shrink-0 flex items-center gap-1.5 text-secondary hover:text-accent border border-border hover:border-accent px-3 py-1.5 rounded-sm font-mono text-xs transition-colors">
-            <Edit3 size={13} /> EDIT
-          </button>
+          <div class="shrink-0 flex flex-col sm:flex-row gap-2">
+            {#if caseItem.status === 'in_progress'}
+              <a href="/investigations/in-progress/{caseItem.id}" class="flex items-center justify-center gap-1.5 text-accent hover:bg-accent/10 border border-accent/40 px-3 py-1.5 rounded-sm font-mono text-xs transition-colors">
+                <ActivityIcon size={13} /> OPEN WORKSPACE
+              </a>
+            {/if}
+            <button on:click={startEdit} class="flex items-center justify-center gap-1.5 text-secondary hover:text-accent border border-border hover:border-accent px-3 py-1.5 rounded-sm font-mono text-xs transition-colors">
+              <Edit3 size={13} /> EDIT
+            </button>
+          </div>
         {/if}
       </div>
     </div>
