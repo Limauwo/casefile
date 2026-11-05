@@ -71,6 +71,10 @@ You can preview the built production app by running:
 npm run preview
 ```
 
+### GitHub Actions
+
+The **Build** workflow runs on every push and pull request. It installs the locked dependencies with `npm ci`, runs `npm run check`, and creates the production build with `npm run build`. You can also start it manually from the repository's Actions tab.
+
 ---
 
 ## Project Architecture
