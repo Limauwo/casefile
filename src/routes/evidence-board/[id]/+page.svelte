@@ -19,6 +19,7 @@
   const WORLD_ORIGIN = WORLD_SIZE / 2;
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 2;
+  const PAN_SENSITIVITY = 0.4;
   type DragTarget = { kind: 'note'; id: string } | { kind: 'hub'; id: string };
   let activeTool: 'select' | 'hand' = 'select';
   let selectedTarget: DragTarget | null = null;
@@ -70,7 +71,7 @@
   let dragOffsetY = 0;
 
   function startDragNote(e: MouseEvent, note: Note) {
-    if (activeTool !== 'select' || (e.target as HTMLElement).closest('button')) return;
+    if (e.button !== 0 || activeTool !== 'select' || (e.target as HTMLElement).closest('button')) return;
     selectedTarget = { kind: 'note', id: note.id };
     dragging = { kind: 'note', id: note.id };
     const el = document.getElementById(`note-${note.id}`);
@@ -85,7 +86,7 @@
   }
 
   function startDragHub(e: MouseEvent, caseId: string) {
-    if (activeTool !== 'select' || (e.target as HTMLElement).closest('button, a')) return;
+    if (e.button !== 0 || activeTool !== 'select' || (e.target as HTMLElement).closest('button, a')) return;
     selectedTarget = { kind: 'hub', id: caseId };
     dragging = { kind: 'hub', id: caseId };
     const el = document.getElementById(`hub-${caseId}`);
@@ -121,14 +122,15 @@
   }
 
   function startPan(e: MouseEvent) {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('button, a, input, [data-board-controls]')) return;
+    if ((e.target as HTMLElement).closest('button, a, input, [data-board-controls]')) return;
     if (activeTool === 'select') {
-      if (!(e.target as HTMLElement).closest('[id^="note-"], [id^="hub-"]')) {
+      if (e.button === 0 && !(e.target as HTMLElement).closest('[id^="note-"], [id^="hub-"]')) {
         selectedTarget = null;
       }
       return;
     }
 
+    if (e.button !== 2) return;
     isPanning = true;
     panLastX = e.clientX;
     panLastY = e.clientY;
@@ -141,10 +143,14 @@
     if (!isPanning) return;
     const board = document.getElementById('evidence-board-canvas');
     if (!board) return;
-    board.scrollLeft -= e.clientX - panLastX;
-    board.scrollTop -= e.clientY - panLastY;
+    board.scrollLeft -= (e.clientX - panLastX) * PAN_SENSITIVITY;
+    board.scrollTop -= (e.clientY - panLastY) * PAN_SENSITIVITY;
     panLastX = e.clientX;
     panLastY = e.clientY;
+  }
+
+  function handleBoardContextMenu(e: MouseEvent) {
+    if (activeTool === 'hand') e.preventDefault();
   }
 
   function endPan() {
@@ -326,6 +332,7 @@
       class="flex-1 relative overflow-auto border border-border rounded-sm {activeTool === 'hand' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}"
       style="min-height: 600px;"
       on:mousedown={startPan}
+      on:contextmenu={handleBoardContextMenu}
     >
       <div class="sticky top-0 z-50 h-0 pointer-events-none">
         <div data-board-controls class="absolute top-3 left-3 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg pointer-events-auto">
@@ -342,7 +349,7 @@
             on:click={() => activeTool = 'hand'}
             aria-label="Hand tool"
             aria-pressed={activeTool === 'hand'}
-            title="Pan the board"
+            title="Right-click and drag to pan the board"
             class="px-2 py-1 rounded-sm font-mono text-[10px] transition-colors {activeTool === 'hand' ? 'bg-accent text-primary' : 'text-secondary hover:text-primary'}"
           >
             HAND
