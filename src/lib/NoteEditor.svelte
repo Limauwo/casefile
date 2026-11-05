@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import { Eraser } from 'lucide-svelte';
 
   export let id: string;
   export let value = '';
@@ -71,6 +72,30 @@
     textarea.setSelectionRange(lineStart, lineStart + formattedLines.length);
     rememberSelection();
   }
+
+  function removeFormatting(text: string): string {
+    return text
+      .replace(/\*\*(.+?)\*\*/g, '$1')
+      .replace(/__(.+?)__/g, '$1')
+      .replace(/~~(.+?)~~/g, '$1')
+      .replace(/`([^`\n]+)`/g, '$1')
+      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1$2')
+      .split('\n')
+      .map(line => line.replace(/^- \[[ xX]\] /, '').replace(/^- /, ''))
+      .join('\n');
+  }
+
+  async function clearFormatting() {
+    const hasSelection = selectionStart !== selectionEnd;
+    const start = hasSelection ? selectionStart : 0;
+    const end = hasSelection ? selectionEnd : value.length;
+    const cleanText = removeFormatting(value.slice(start, end));
+    value = `${value.slice(0, start)}${cleanText}${value.slice(end)}`;
+    await tick();
+    textarea.focus();
+    textarea.setSelectionRange(start, start + cleanText.length);
+    rememberSelection();
+  }
 </script>
 
 <div class="space-y-2">
@@ -106,6 +131,16 @@
       title="Checklist / to-do list"
     >
       ☐ To-do / Checklist
+    </button>
+    <button
+      type="button"
+      on:mousedown|preventDefault={rememberSelection}
+      on:click={clearFormatting}
+      class="inline-flex items-center gap-1 border border-border hover:border-accent hover:text-accent rounded-sm px-2 py-1 text-xs text-primary"
+      aria-label="Clear formatting"
+      title="Clear formatting from selection, or the whole note if nothing is selected"
+    >
+      <Eraser size={12} /> Clear formatting
     </button>
     <span class="text-[10px] text-secondary ml-1">Select text, then apply formatting</span>
   </div>
