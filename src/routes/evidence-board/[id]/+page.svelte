@@ -3,7 +3,7 @@
   import { cases, notes, isInitialized, type Note, type Case, addNote, updateNote, deleteNote } from '$lib/store';
   import NoteEditor from '$lib/NoteEditor.svelte';
   import { formatNoteContent } from '$lib/noteFormatting';
-  import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft, Eye } from 'lucide-svelte';
+  import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft, Eye, ZoomIn, ZoomOut } from 'lucide-svelte';
   import { onDestroy } from 'svelte';
 
   $: caseId = $page.params.id ?? '';
@@ -15,7 +15,14 @@
   const HUB_W = 140;
   const HUB_H = 70;
   const GRID_SIZE = 40;
+  const MIN_ZOOM = 0.5;
+  const MAX_ZOOM = 2;
+  let zoom = 1;
   let snapToGridEnabled = true;
+
+  function adjustZoom(amount: number) {
+    zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round((zoom + amount) * 10) / 10));
+  }
 
   function snapToGrid(value: number): number {
     return Math.max(0, Math.round(value / GRID_SIZE) * GRID_SIZE);
@@ -78,8 +85,8 @@
     const board = document.getElementById('evidence-board-canvas');
     if (!board) return;
     const rect = board.getBoundingClientRect();
-    const x = getDragPosition(e.clientX - rect.left - dragOffsetX);
-    const y = getDragPosition(e.clientY - rect.top - dragOffsetY);
+    const x = getDragPosition((e.clientX - rect.left - board.clientLeft + board.scrollLeft - dragOffsetX) / zoom);
+    const y = getDragPosition((e.clientY - rect.top - board.clientTop + board.scrollTop - dragOffsetY) / zoom);
 
     if (dragging.kind === 'note') {
       notes.update(ns => ns.map(n => n.id === (dragging as DragTarget & {kind:'note'}).id ? { ...n, positionX: x, positionY: y } : n));
@@ -256,8 +263,12 @@
     <div
       id="evidence-board-canvas"
       class="flex-1 relative overflow-auto border border-border rounded-sm"
-      style="background-color: #111315; background-image: linear-gradient(to right, #30353a 1px, transparent 1px), linear-gradient(to bottom, #30353a 1px, transparent 1px); background-size: {GRID_SIZE}px {GRID_SIZE}px; min-height: 600px;"
+      style="min-height: 600px;"
     >
+      <div
+        class="relative origin-top-left"
+        style="width: {100 / zoom}%; height: {100 / zoom}%; min-width: {100 / zoom}%; min-height: {100 / zoom}%; transform: scale({zoom}); background-color: #111315; background-image: linear-gradient(to right, #30353a 1px, transparent 1px), linear-gradient(to bottom, #30353a 1px, transparent 1px); background-size: {GRID_SIZE}px {GRID_SIZE}px;"
+      >
       <!-- SVG Thread Overlay -->
       <svg class="absolute inset-0 pointer-events-none z-10" style="width: 100%; height: 100%; overflow: visible;">
         <defs>
@@ -408,6 +419,29 @@
           <p class="font-mono text-xs text-secondary mt-1">Add evidence to {caseItem.caseNumber} to build this case board</p>
         </div>
       {/if}
+      </div>
+
+      <div class="absolute top-3 right-3 z-50 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg">
+        <button
+          on:click={() => adjustZoom(-0.1)}
+          disabled={zoom <= MIN_ZOOM}
+          aria-label="Zoom out"
+          title="Zoom out"
+          class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <ZoomOut size={16} />
+        </button>
+        <span class="min-w-[3.5rem] text-center font-mono text-[10px] text-primary">{Math.round(zoom * 100)}%</span>
+        <button
+          on:click={() => adjustZoom(0.1)}
+          disabled={zoom >= MAX_ZOOM}
+          aria-label="Zoom in"
+          title="Zoom in"
+          class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <ZoomIn size={16} />
+        </button>
+      </div>
     </div>
 
     <!-- Legend -->
