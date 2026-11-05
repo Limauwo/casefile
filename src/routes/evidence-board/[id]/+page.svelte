@@ -20,12 +20,15 @@
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 2;
   const PAN_SENSITIVITY = 0.4;
+  type HandGesture = 'right-drag' | 'double-click-drag';
   type DragTarget = { kind: 'note'; id: string } | { kind: 'hub'; id: string };
   let activeTool: 'select' | 'hand' = 'select';
+  let handGesture: HandGesture = 'right-drag';
   let selectedTarget: DragTarget | null = null;
   let isPanning = false;
   let panLastX = 0;
   let panLastY = 0;
+  let lastHandClick = 0;
   let zoom = 1;
   let snapToGridEnabled = true;
   let boardCanvas: HTMLDivElement;
@@ -130,13 +133,30 @@
       return;
     }
 
-    if (e.button !== 2) return;
+    const shouldPanWithRightDrag = handGesture === 'right-drag' && e.button === 2;
+    const isDoubleClickDrag = handGesture === 'double-click-drag' &&
+      e.button === 0 &&
+      Date.now() - lastHandClick <= 400;
+    if (!shouldPanWithRightDrag && !isDoubleClickDrag) return;
+
+    lastHandClick = 0;
     isPanning = true;
     panLastX = e.clientX;
     panLastY = e.clientY;
     window.addEventListener('mousemove', onPan);
     window.addEventListener('mouseup', endPan);
     e.preventDefault();
+  }
+
+  function rememberHandClick(e: MouseEvent) {
+    if (
+      activeTool === 'hand' &&
+      handGesture === 'double-click-drag' &&
+      e.button === 0 &&
+      !(e.target as HTMLElement).closest('button, a, input, [data-board-controls]')
+    ) {
+      lastHandClick = Date.now();
+    }
   }
 
   function onPan(e: MouseEvent) {
@@ -332,12 +352,13 @@
       class="flex-1 relative overflow-auto border border-border rounded-sm {activeTool === 'hand' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}"
       style="min-height: 600px;"
       on:mousedown={startPan}
+      on:click={rememberHandClick}
       on:contextmenu={handleBoardContextMenu}
     >
       <div class="sticky top-0 z-50 h-0 pointer-events-none">
         <div data-board-controls class="absolute top-3 left-3 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg pointer-events-auto">
           <button
-            on:click={() => activeTool = 'select'}
+            on:click={() => { activeTool = 'select'; lastHandClick = 0; }}
             aria-label="Select tool"
             aria-pressed={activeTool === 'select'}
             title="Select and move evidence"
@@ -346,14 +367,27 @@
             SELECT
           </button>
           <button
-            on:click={() => activeTool = 'hand'}
+            on:click={() => { activeTool = 'hand'; lastHandClick = 0; }}
             aria-label="Hand tool"
             aria-pressed={activeTool === 'hand'}
-            title="Right-click and drag to pan the board"
+            title={handGesture === 'right-drag' ? 'Right-click and drag to pan the board' : 'Double-click, hold, and drag to pan the board'}
             class="px-2 py-1 rounded-sm font-mono text-[10px] transition-colors {activeTool === 'hand' ? 'bg-accent text-primary' : 'text-secondary hover:text-primary'}"
           >
             HAND
           </button>
+          {#if activeTool === 'hand'}
+            <label class="sr-only" for="hand-gesture">Hand tool gesture</label>
+            <select
+              id="hand-gesture"
+              data-board-controls
+              bind:value={handGesture}
+              on:change={() => lastHandClick = 0}
+              class="bg-background border border-border rounded-sm px-1.5 py-1 font-mono text-[10px] text-secondary focus:outline-none focus:border-accent"
+            >
+              <option value="right-drag">RIGHT DRAG</option>
+              <option value="double-click-drag">DOUBLE-CLICK DRAG</option>
+            </select>
+          {/if}
         </div>
         <div data-board-controls class="absolute top-3 right-3 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg pointer-events-auto">
           <button
