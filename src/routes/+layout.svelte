@@ -19,8 +19,8 @@
     filterPriority,
     clearAllData,
     initializeStore,
-    type Status,
   } from "$lib/store";
+  import type { Status } from "$lib/store";
   import { onMount } from "svelte";
   import { page } from "$app/stores";
   import { goto } from "$app/navigation";
