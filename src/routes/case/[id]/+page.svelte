@@ -2,7 +2,7 @@
   import { page } from '$app/stores';
   import { cases, activities, notes, isInitialized, type Case, type Priority, type Status, updateCase, addNote, updateNote, deleteNote } from '$lib/store';
   import NoteEditor from '$lib/NoteEditor.svelte';
-  import { formatNoteContent } from '$lib/noteFormatting';
+  import { formatNoteContent, getNoteContentBlocks, toggleChecklistItem } from '$lib/noteFormatting';
   import { FileText, ArrowLeft, Clock, Activity as ActivityIcon, Edit3, Trash2, Plus, X, AlertTriangle, CheckCircle, Map } from 'lucide-svelte';
 
   $: caseId = $page.params.id ?? '';
@@ -72,6 +72,12 @@
       addNote({ title: formNoteTitle, content: formNoteContent, relatedCaseId: caseId });
     }
     isNoteModalOpen = false;
+  }
+
+  function toggleCaseNoteChecklistItem(noteId: string, lineIndex: number) {
+    const note = caseNotes.find(item => item.id === noteId);
+    if (!note) return;
+    updateNote(noteId, { content: toggleChecklistItem(note.content, lineIndex) });
   }
 
   // ── Helpers ───────────────────────────────────────────────────
@@ -250,7 +256,26 @@
                   </button>
                 </div>
               </div>
-              <div class="text-secondary text-sm leading-relaxed">{@html formatNoteContent(note.content || '—')}</div>
+              <div class="text-secondary text-sm leading-relaxed">
+                {#each getNoteContentBlocks(note.content || '—') as block}
+                  {#if block.type === 'checklist'}
+                    <label class="flex max-w-full items-start gap-2 text-left hover:text-primary">
+                      <input
+                        type="checkbox"
+                        checked={block.checked}
+                        aria-label="{block.checked ? 'Mark incomplete' : 'Mark complete'}: {block.text}"
+                        on:change={() => toggleCaseNoteChecklistItem(note.id, block.lineIndex)}
+                        class="mt-1 h-4 w-4 shrink-0 accent-[#A64242]"
+                      />
+                      <span class={block.checked ? 'line-through opacity-60' : ''}>
+                        {@html formatNoteContent(block.text)}
+                      </span>
+                    </label>
+                  {:else}
+                    {@html formatNoteContent(block.content)}
+                  {/if}
+                {/each}
+              </div>
               <p class="font-mono text-[10px] text-secondary/50 mt-2 pt-2 border-t border-border/50">Updated {fmt(note.updatedAt)}</p>
             </div>
           {/each}
