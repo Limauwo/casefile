@@ -2,9 +2,11 @@
   import { page } from '$app/stores';
   import { cases, notes, isInitialized, type Note, type Case, addNote, updateNote, deleteNote } from '$lib/store';
   import NoteEditor from '$lib/NoteEditor.svelte';
+  import EvidenceBoardMinimap from '$lib/EvidenceBoardMinimap.svelte';
+  import type { MinimapItem } from '$lib/evidenceBoardMinimap';
   import { formatNoteContent } from '$lib/noteFormatting';
   import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft, Eye, ZoomIn, ZoomOut } from 'lucide-svelte';
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy } from 'svelte';
 
   $: caseId = $page.params.id ?? '';
   $: caseItem = $cases.find(c => c.id === caseId) as Case | undefined;
@@ -25,7 +27,7 @@
   type BoardItem = { kind: 'note' | 'hub'; id: string };
   type Interaction =
     | { mode: 'idle' }
-    | { mode: 'panning'; pointerId: number; lastScreen: Point }
+    | { mode: 'panning'; pointerId: number; lastScreen: Point; startScreen: Point; button: number; didPan: boolean }
     | { mode: 'marquee'; pointerId: number; startWorld: Point; currentWorld: Point; startScreen: Point; moved: boolean; additive: boolean; initialSelection: Set<string> }
     | { mode: 'draggingItems'; pointerId: number; startScreen: Point; initialPositions: Record<string, Point> };
   let viewport = { x: 0, y: 0, scale: 1 };
@@ -34,8 +36,12 @@
   let isSpacePressed = false;
   let snapToGridEnabled = true;
   let boardCanvas: HTMLDivElement;
+  let boardSize = { width: 0, height: 0 };
+  let hasInitializedViewport = false;
+  let itemSizes: Record<string, { width: number; height: number }> = {};
   let pendingDragFrame = 0;
   let pendingDragMove: { point: Point; startScreen: Point; initialPositions: Record<string, Point> } | null = null;
+  let suppressNextContextMenu = false;
 
   function screenToWorld(point: Point): Point {
     return {
@@ -88,6 +94,45 @@
       return note ? { x: note.positionX, y: note.positionY } : undefined;
     }
     return hubPositions[id];
+  }
+
+  function trackItemSize(node: HTMLElement, key: string) {
+    const updateSize = () => {
+      const size = { width: node.offsetWidth, height: node.offsetHeight };
+      const previous = itemSizes[key];
+      if (previous?.width === size.width && previous.height === size.height) return;
+      itemSizes = { ...itemSizes, [key]: size };
+    };
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(node);
+    updateSize();
+
+    return {
+      destroy() {
+        observer.disconnect();
+        const { [key]: _removed, ...remainingSizes } = itemSizes;
+        itemSizes = remainingSizes;
+      }
+    };
+  }
+
+  function observeBoard(node: HTMLDivElement) {
+    const updateSize = () => {
+      boardSize = { width: node.clientWidth, height: node.clientHeight };
+    };
+    const observer = new ResizeObserver(updateSize);
+    observer.observe(node);
+    updateSize();
+    if (!hasInitializedViewport) {
+      viewport = {
+        x: node.clientWidth / 2 - WORLD_ORIGIN,
+        y: node.clientHeight / 2 - WORLD_ORIGIN,
+        scale: 1
+      };
+      hasInitializedViewport = true;
+    }
+
+    return { destroy: () => observer.disconnect() };
   }
 
   function updateItems(positions: Record<string, Point>) {
@@ -157,6 +202,14 @@
     };
   }
 
+  function navigateToWorld(worldX: number, worldY: number) {
+    viewport = {
+      ...viewport,
+      x: boardSize.width / 2 - (WORLD_ORIGIN + worldX) * viewport.scale,
+      y: boardSize.height / 2 - (WORLD_ORIGIN + worldY) * viewport.scale
+    };
+  }
+
   function handleWheel(event: WheelEvent) {
     event.preventDefault();
     if (interaction.mode !== 'idle') return;
@@ -173,7 +226,9 @@
   }
 
   function preventContextMenu(event: MouseEvent) {
+    if (!suppressNextContextMenu) return;
     event.preventDefault();
+    suppressNextContextMenu = false;
   }
 
   function snapToGrid(value: number): number {
@@ -203,11 +258,19 @@
     const itemElement = target.closest<HTMLElement>('[data-board-item]');
     const controlsElement = target.closest('button, a, input, select, [data-board-controls]');
 
-    if (controlsElement) return;
-    if (event.button === 1 || (event.button === 0 && isSpacePressed)) {
-      event.preventDefault();
+    if (controlsElement && event.button !== 1 && event.button !== 2) return;
+    if (event.button === 2) suppressNextContextMenu = false;
+    if (event.button === 1 || event.button === 2 || (event.button === 0 && isSpacePressed)) {
+      if (event.button !== 2) event.preventDefault();
       board.setPointerCapture(event.pointerId);
-      interaction = { mode: 'panning', pointerId: event.pointerId, lastScreen: point };
+      interaction = {
+        mode: 'panning',
+        pointerId: event.pointerId,
+        lastScreen: point,
+        startScreen: point,
+        button: event.button,
+        didPan: false
+      };
       return;
     }
     if (event.button !== 0 || controlsElement) return;
@@ -270,7 +333,9 @@
       const dx = point.x - interaction.lastScreen.x;
       const dy = point.y - interaction.lastScreen.y;
       viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
-      interaction = { ...interaction, lastScreen: point };
+      const didPan = interaction.didPan ||
+        Math.hypot(point.x - interaction.startScreen.x, point.y - interaction.startScreen.y) >= MARQUEE_THRESHOLD;
+      interaction = { ...interaction, lastScreen: point, didPan };
       return;
     }
 
@@ -306,6 +371,8 @@
     if (interaction.mode === 'draggingItems') {
       flushItemMove(cancelled ? undefined : boardPoint(event));
       if (cancelled) updateItems(interaction.initialPositions);
+    } else if (interaction.mode === 'panning' && interaction.button === 2 && interaction.didPan && !cancelled) {
+      suppressNextContextMenu = true;
     } else if (interaction.mode === 'marquee') {
       if (!cancelled) {
         const endScreen = boardPoint(event);
@@ -366,6 +433,26 @@
       }
       interaction = { mode: 'idle' };
       selectedItems = new Set();
+      return;
+    }
+
+    const boardHasFocus = boardCanvas && boardCanvas.contains(document.activeElement);
+    if (
+      boardHasFocus &&
+      !isTypingTarget(event.target) &&
+      interaction.mode === 'idle' &&
+      ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)
+    ) {
+      const distance = event.shiftKey ? 80 : 24;
+      const movement: Record<string, Point> = {
+        ArrowUp: { x: 0, y: distance },
+        ArrowDown: { x: 0, y: -distance },
+        ArrowLeft: { x: distance, y: 0 },
+        ArrowRight: { x: -distance, y: 0 }
+      };
+      const delta = movement[event.key];
+      viewport = { ...viewport, x: viewport.x + delta.x, y: viewport.y + delta.y };
+      event.preventDefault();
     }
   }
 
@@ -395,13 +482,28 @@
     if (pendingDragFrame) cancelAnimationFrame(pendingDragFrame);
   });
 
-  onMount(() => {
-    viewport = {
-      x: boardCanvas.clientWidth / 2 - WORLD_ORIGIN,
-      y: boardCanvas.clientHeight / 2 - WORLD_ORIGIN,
-      scale: 1
-    };
-  });
+  $: minimapItems = [
+    ...boardNotes.map(note => ({
+      id: note.id,
+      kind: 'note' as const,
+      x: note.positionX,
+      y: note.positionY,
+      width: itemSizes[`note:${note.id}`]?.width ?? NOTE_W,
+      height: itemSizes[`note:${note.id}`]?.height ?? NOTE_H,
+      selected: selectedItems.has(`note:${note.id}`)
+    })),
+    ...activeCases
+      .filter(item => hubPositions[item.id])
+      .map(item => ({
+        id: item.id,
+        kind: 'hub' as const,
+        x: hubPositions[item.id].x,
+        y: hubPositions[item.id].y,
+        width: itemSizes[`hub:${item.id}`]?.width ?? HUB_W,
+        height: itemSizes[`hub:${item.id}`]?.height ?? HUB_H,
+        selected: selectedItems.has(`hub:${item.id}`)
+      }))
+  ] satisfies MinimapItem[];
 
   $: gridStep = GRID_SIZE * viewport.scale;
   $: gridPositionX = ((viewport.x % gridStep) + gridStep) % gridStep;
@@ -554,7 +656,7 @@
         <Map size={24} class="text-accent" />
         EVIDENCE BOARD <span class="text-accent">{caseItem.caseNumber}</span>
       </h1>
-      <p class="text-secondary font-mono text-xs mt-0.5">{caseItem.title} · Drag items · Middle/Space-drag to pan · Ctrl-scroll to zoom</p>
+      <p class="text-secondary font-mono text-xs mt-0.5">{caseItem.title} · Drag items · Middle/Right/Space-drag or two-finger scroll to pan · Ctrl-scroll to zoom</p>
     </div>
     <div class="flex items-center gap-3">
       <label for="snap-to-grid" class="inline-flex items-center gap-2 text-secondary font-mono text-[10px] cursor-pointer select-none">
@@ -581,9 +683,11 @@
     <div
       id="evidence-board-canvas"
       bind:this={boardCanvas}
+      use:observeBoard
       role="application"
-      aria-label="Interactive evidence board. Use middle mouse or hold Space and drag to pan. Use Shift, Control, or Command with click to select multiple items."
-      class="flex-1 relative overflow-hidden border border-border rounded-sm touch-none select-none {interaction.mode === 'panning' ? 'cursor-grabbing' : 'cursor-grab'}"
+      tabindex="0"
+      aria-label="Interactive evidence board. Use middle or right mouse, or hold Space and drag to pan. Use arrow keys to pan and Shift, Control, or Command with click to select multiple items."
+      class="flex-1 relative overflow-hidden border border-border rounded-sm touch-none select-none outline-none focus-visible:ring-1 focus-visible:ring-accent {interaction.mode === 'panning' ? 'cursor-grabbing' : 'cursor-grab'}"
       style="min-height: 600px; user-select: none; background-color: #111315; background-image: linear-gradient(to right, #30353a 1px, transparent 1px), linear-gradient(to bottom, #30353a 1px, transparent 1px); background-size: {gridStep}px {gridStep}px; background-position: {gridPositionX}px {gridPositionY}px;"
       on:pointerdown={handlePointerDown}
       on:pointermove={handlePointerMove}
@@ -593,7 +697,15 @@
       on:contextmenu={preventContextMenu}
       on:wheel|nonpassive={handleWheel}
     >
-      {#if marqueeRect}
+    <EvidenceBoardMinimap
+      viewport={viewport}
+      items={minimapItems}
+      viewportSize={boardSize}
+      worldOrigin={WORLD_ORIGIN}
+      onNavigate={navigateToWorld}
+    />
+
+    {#if marqueeRect}
         <div
           aria-hidden="true"
           class="absolute z-40 border border-accent bg-accent/20 pointer-events-none"
@@ -601,7 +713,7 @@
         ></div>
       {/if}
 
-      <div data-board-controls class="absolute top-3 right-3 z-50 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg">
+      <div data-board-controls class="absolute top-3 left-3 z-50 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg">
         <button
           on:click={() => adjustZoomAt({ x: boardCanvas.clientWidth / 2, y: boardCanvas.clientHeight / 2 }, 1 / 1.1)}
           disabled={viewport.scale <= MIN_ZOOM}
@@ -690,6 +802,7 @@
           <!-- svelte-ignore a11y-no-static-element-interactions -->
           <div
             id="hub-{c.id}"
+            use:trackItemSize={`hub:${c.id}`}
             data-board-item="hub"
             data-item-id={c.id}
             role="option"
@@ -722,6 +835,7 @@
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
           id="note-{note.id}"
+          use:trackItemSize={`note:${note.id}`}
           data-board-item="note"
           data-item-id={note.id}
           role="option"
