@@ -4,7 +4,7 @@
   import NoteEditor from '$lib/NoteEditor.svelte';
   import { formatNoteContent } from '$lib/noteFormatting';
   import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft, Eye, ZoomIn, ZoomOut } from 'lucide-svelte';
-  import { onDestroy, onMount, tick } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
 
   $: caseId = $page.params.id ?? '';
   $: caseItem = $cases.find(c => c.id === caseId) as Case | undefined;
@@ -15,42 +15,169 @@
   const HUB_W = 140;
   const HUB_H = 70;
   const GRID_SIZE = 40;
-  const WORLD_SIZE = 20000;
+  const WORLD_SIZE = 100000;
   const WORLD_ORIGIN = WORLD_SIZE / 2;
-  const MIN_ZOOM = 0.5;
-  const MAX_ZOOM = 2;
-  const PAN_SENSITIVITY = 0.4;
-  type HandGesture = 'right-drag' | 'double-click-drag';
-  type DragTarget = { kind: 'note'; id: string } | { kind: 'hub'; id: string };
-  let activeTool: 'select' | 'hand' = 'select';
-  let handGesture: HandGesture = 'right-drag';
-  let selectedTarget: DragTarget | null = null;
-  let isPanning = false;
-  let panLastX = 0;
-  let panLastY = 0;
-  let lastHandClick = 0;
-  let zoom = 1;
+  const MIN_ZOOM = 0.2;
+  const MAX_ZOOM = 3;
+  const PAN_SENSITIVITY = 0.65;
+  const MARQUEE_THRESHOLD = 4;
+  type Point = { x: number; y: number };
+  type BoardItem = { kind: 'note' | 'hub'; id: string };
+  type Interaction =
+    | { mode: 'idle' }
+    | { mode: 'panning'; pointerId: number; lastScreen: Point }
+    | { mode: 'marquee'; pointerId: number; startWorld: Point; currentWorld: Point; startScreen: Point; moved: boolean; additive: boolean; initialSelection: Set<string> }
+    | { mode: 'draggingItems'; pointerId: number; startScreen: Point; initialPositions: Record<string, Point> };
+  let viewport = { x: 0, y: 0, scale: 1 };
+  let interaction: Interaction = { mode: 'idle' };
+  let selectedItems = new Set<string>();
+  let isSpacePressed = false;
   let snapToGridEnabled = true;
   let boardCanvas: HTMLDivElement;
+  let pendingDragFrame = 0;
+  let pendingDragMove: { point: Point; startScreen: Point; initialPositions: Record<string, Point> } | null = null;
 
-  async function adjustZoom(amount: number) {
-    const nextZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, Math.round((zoom + amount) * 10) / 10));
-    if (nextZoom === zoom) return;
+  function screenToWorld(point: Point): Point {
+    return {
+      x: (point.x - viewport.x) / viewport.scale - WORLD_ORIGIN,
+      y: (point.y - viewport.y) / viewport.scale - WORLD_ORIGIN
+    };
+  }
 
-    const centerX = (boardCanvas.scrollLeft + boardCanvas.clientWidth / 2) / zoom;
-    const centerY = (boardCanvas.scrollTop + boardCanvas.clientHeight / 2) / zoom;
-    zoom = nextZoom;
-    await tick();
-    boardCanvas.scrollLeft = centerX * zoom - boardCanvas.clientWidth / 2;
-    boardCanvas.scrollTop = centerY * zoom - boardCanvas.clientHeight / 2;
+  function worldToScreen(point: Point): Point {
+    return {
+      x: viewport.x + (WORLD_ORIGIN + point.x) * viewport.scale,
+      y: viewport.y + (WORLD_ORIGIN + point.y) * viewport.scale
+    };
+  }
+
+  function boardPoint(event: PointerEvent | WheelEvent): Point {
+    const rect = boardCanvas.getBoundingClientRect();
+    return {
+      x: event.clientX - rect.left - boardCanvas.clientLeft,
+      y: event.clientY - rect.top - boardCanvas.clientTop
+    };
+  }
+
+  function selectionKey(item: BoardItem): string {
+    return `${item.kind}:${item.id}`;
+  }
+
+  function isSelected(item: BoardItem): boolean {
+    return selectedItems.has(selectionKey(item));
+  }
+
+  function applySelection(item: BoardItem, additive: boolean) {
+    const key = selectionKey(item);
+    if (!additive) {
+      selectedItems = new Set([key]);
+    } else {
+      const next = new Set(selectedItems);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      selectedItems = next;
+    }
+  }
+
+  function pointFromKey(key: string): Point | undefined {
+    const separator = key.indexOf(':');
+    const kind = key.slice(0, separator);
+    const id = key.slice(separator + 1);
+    if (kind === 'note') {
+      const note = boardNotes.find(item => item.id === id);
+      return note ? { x: note.positionX, y: note.positionY } : undefined;
+    }
+    return hubPositions[id];
+  }
+
+  function updateItems(positions: Record<string, Point>) {
+    notes.update(items => items.map(note => {
+      const position = positions[`note:${note.id}`];
+      return position && note.relatedCaseId === caseId
+        ? { ...note, positionX: position.x, positionY: position.y }
+        : note;
+    }));
+
+    const hubUpdates: Record<string, Point> = {};
+    for (const [key, position] of Object.entries(positions)) {
+      if (key.startsWith('hub:')) hubUpdates[key.slice(4)] = position;
+    }
+    if (Object.keys(hubUpdates).length > 0) {
+      hubPositions = { ...hubPositions, ...hubUpdates };
+    }
+  }
+
+  function moveItems(point: Point, startScreen: Point, initialPositions: Record<string, Point>) {
+    const delta = {
+      x: (point.x - startScreen.x) / viewport.scale,
+      y: (point.y - startScreen.y) / viewport.scale
+    };
+    const nextPositions: Record<string, Point> = {};
+    for (const [key, initial] of Object.entries(initialPositions)) {
+      const next = { x: initial.x + delta.x, y: initial.y + delta.y };
+      nextPositions[key] = snapToGridEnabled
+        ? { x: snapToGrid(next.x), y: snapToGrid(next.y) }
+        : next;
+    }
+    updateItems(nextPositions);
+  }
+
+  function scheduleItemMove(point: Point, startScreen: Point, initialPositions: Record<string, Point>) {
+    pendingDragMove = { point, startScreen, initialPositions };
+    if (pendingDragFrame) return;
+    pendingDragFrame = requestAnimationFrame(() => {
+      pendingDragFrame = 0;
+      if (pendingDragMove) {
+        moveItems(pendingDragMove.point, pendingDragMove.startScreen, pendingDragMove.initialPositions);
+        pendingDragMove = null;
+      }
+    });
+  }
+
+  function flushItemMove(point?: Point) {
+    if (pendingDragFrame) {
+      cancelAnimationFrame(pendingDragFrame);
+      pendingDragFrame = 0;
+    }
+    const pending = pendingDragMove;
+    pendingDragMove = null;
+    if (pending) {
+      moveItems(point ?? pending.point, pending.startScreen, pending.initialPositions);
+    }
+  }
+
+  function adjustZoomAt(screen: Point, amount: number) {
+    const worldPoint = screenToWorld(screen);
+    const nextScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.scale * amount));
+    if (nextScale === viewport.scale) return;
+    viewport = {
+      x: screen.x - (WORLD_ORIGIN + worldPoint.x) * nextScale,
+      y: screen.y - (WORLD_ORIGIN + worldPoint.y) * nextScale,
+      scale: nextScale
+    };
+  }
+
+  function handleWheel(event: WheelEvent) {
+    event.preventDefault();
+    if (interaction.mode !== 'idle') return;
+    const point = boardPoint(event);
+    if (event.ctrlKey) {
+      adjustZoomAt(point, Math.exp(-event.deltaY * 0.01));
+      return;
+    }
+    viewport = {
+      ...viewport,
+      x: viewport.x - event.deltaX * PAN_SENSITIVITY,
+      y: viewport.y - event.deltaY * PAN_SENSITIVITY
+    };
+  }
+
+  function preventContextMenu(event: MouseEvent) {
+    event.preventDefault();
   }
 
   function snapToGrid(value: number): number {
     return Math.round(value / GRID_SIZE) * GRID_SIZE;
-  }
-
-  function getDragPosition(value: number): number {
-    return snapToGridEnabled ? snapToGrid(value) : value;
   }
 
   // Keep a separate hub position for each case while navigating between boards.
@@ -68,128 +195,229 @@
 
   $: activeCases = caseItem ? [caseItem] : [];
 
-  // --- Dragging State ---
-  let dragging: DragTarget | null = null;
-  let dragOffsetX = 0;
-  let dragOffsetY = 0;
+  function handlePointerDown(event: PointerEvent) {
+    const board = event.currentTarget as HTMLDivElement;
+    const target = event.target as HTMLElement;
+    const point = boardPoint(event);
+    const additive = event.shiftKey || event.ctrlKey || event.metaKey;
+    const itemElement = target.closest<HTMLElement>('[data-board-item]');
+    const controlsElement = target.closest('button, a, input, select, [data-board-controls]');
 
-  function startDragNote(e: MouseEvent, note: Note) {
-    if (e.button !== 0 || activeTool !== 'select' || (e.target as HTMLElement).closest('button')) return;
-    selectedTarget = { kind: 'note', id: note.id };
-    dragging = { kind: 'note', id: note.id };
-    const el = document.getElementById(`note-${note.id}`);
-    if (el) {
-      const rect = el.getBoundingClientRect();
-      dragOffsetX = e.clientX - rect.left;
-      dragOffsetY = e.clientY - rect.top;
+    if (controlsElement) return;
+    if (event.button === 1 || (event.button === 0 && isSpacePressed)) {
+      event.preventDefault();
+      board.setPointerCapture(event.pointerId);
+      interaction = { mode: 'panning', pointerId: event.pointerId, lastScreen: point };
+      return;
     }
-    window.addEventListener('mousemove', onDrag);
-    window.addEventListener('mouseup', endDrag);
-    e.preventDefault();
-  }
+    if (event.button !== 0 || controlsElement) return;
 
-  function startDragHub(e: MouseEvent, caseId: string) {
-    if (e.button !== 0 || activeTool !== 'select' || (e.target as HTMLElement).closest('button, a')) return;
-    selectedTarget = { kind: 'hub', id: caseId };
-    dragging = { kind: 'hub', id: caseId };
-    const el = document.getElementById(`hub-${caseId}`);
-    if (el) {
-      const rect = el.getBoundingClientRect();
-      dragOffsetX = e.clientX - rect.left;
-      dragOffsetY = e.clientY - rect.top;
-    }
-    window.addEventListener('mousemove', onDrag);
-    window.addEventListener('mouseup', endDrag);
-    e.preventDefault();
-  }
-
-  function onDrag(e: MouseEvent) {
-    if (!dragging) return;
-    const board = document.getElementById('evidence-board-canvas');
-    if (!board) return;
-    const rect = board.getBoundingClientRect();
-    const x = getDragPosition((e.clientX - rect.left - board.clientLeft + board.scrollLeft - dragOffsetX) / zoom - WORLD_ORIGIN);
-    const y = getDragPosition((e.clientY - rect.top - board.clientTop + board.scrollTop - dragOffsetY) / zoom - WORLD_ORIGIN);
-
-    if (dragging.kind === 'note') {
-      notes.update(ns => ns.map(n => n.id === (dragging as DragTarget & {kind:'note'}).id ? { ...n, positionX: x, positionY: y } : n));
-    } else if (dragging.kind === 'hub') {
-      hubPositions = { ...hubPositions, [(dragging as DragTarget & {kind:'hub'}).id]: { x, y } };
-    }
-  }
-
-  function endDrag() {
-    dragging = null;
-    window.removeEventListener('mousemove', onDrag);
-    window.removeEventListener('mouseup', endDrag);
-  }
-
-  function startPan(e: MouseEvent) {
-    if ((e.target as HTMLElement).closest('button, a, input, [data-board-controls]')) return;
-    if (activeTool === 'select') {
-      if (e.button === 0 && !(e.target as HTMLElement).closest('[id^="note-"], [id^="hub-"]')) {
-        selectedTarget = null;
+    board.setPointerCapture(event.pointerId);
+    if (itemElement) {
+      const item: BoardItem = {
+        kind: itemElement.dataset.boardItem as BoardItem['kind'],
+        id: itemElement.dataset.itemId ?? ''
+      };
+      const key = selectionKey(item);
+      if (additive) {
+        if (selectedItems.has(key)) {
+          const next = new Set(selectedItems);
+          next.delete(key);
+          selectedItems = next;
+          interaction = { mode: 'idle' };
+          event.preventDefault();
+          return;
+        }
+        selectedItems = new Set([...selectedItems, key]);
+      } else if (!selectedItems.has(key)) {
+        selectedItems = new Set([key]);
       }
+
+      const initialPositions: Record<string, Point> = {};
+      for (const selectedKey of selectedItems) {
+        const position = pointFromKey(selectedKey);
+        if (position) initialPositions[selectedKey] = position;
+      }
+      interaction = {
+        mode: 'draggingItems',
+        pointerId: event.pointerId,
+        startScreen: point,
+        initialPositions
+      };
+      event.preventDefault();
       return;
     }
 
-    const shouldPanWithRightDrag = handGesture === 'right-drag' && e.button === 2;
-    const isDoubleClickDrag = handGesture === 'double-click-drag' &&
-      e.button === 0 &&
-      Date.now() - lastHandClick <= 400;
-    if (!shouldPanWithRightDrag && !isDoubleClickDrag) return;
-
-    lastHandClick = 0;
-    isPanning = true;
-    panLastX = e.clientX;
-    panLastY = e.clientY;
-    window.addEventListener('mousemove', onPan);
-    window.addEventListener('mouseup', endPan);
-    e.preventDefault();
+    const worldPoint = screenToWorld(point);
+    interaction = {
+      mode: 'marquee',
+      pointerId: event.pointerId,
+      startWorld: worldPoint,
+      currentWorld: worldPoint,
+      startScreen: point,
+      moved: false,
+      additive,
+      initialSelection: new Set(selectedItems)
+    };
+    event.preventDefault();
   }
 
-  function rememberHandClick(e: MouseEvent) {
-    if (
-      activeTool === 'hand' &&
-      handGesture === 'double-click-drag' &&
-      e.button === 0 &&
-      !(e.target as HTMLElement).closest('button, a, input, [data-board-controls]')
-    ) {
-      lastHandClick = Date.now();
+  function handlePointerMove(event: PointerEvent) {
+    if (interaction.mode === 'idle' || interaction.pointerId !== event.pointerId) return;
+    const point = boardPoint(event);
+
+    if (interaction.mode === 'panning') {
+      const dx = point.x - interaction.lastScreen.x;
+      const dy = point.y - interaction.lastScreen.y;
+      viewport = { ...viewport, x: viewport.x + dx, y: viewport.y + dy };
+      interaction = { ...interaction, lastScreen: point };
+      return;
+    }
+
+    if (interaction.mode === 'marquee') {
+      const startScreen = worldToScreen(interaction.startWorld);
+      const moved = interaction.moved ||
+        Math.abs(point.x - startScreen.x) >= MARQUEE_THRESHOLD ||
+        Math.abs(point.y - startScreen.y) >= MARQUEE_THRESHOLD;
+      interaction = { ...interaction, currentWorld: screenToWorld(point), moved };
+      return;
+    }
+
+    scheduleItemMove(point, interaction.startScreen, interaction.initialPositions);
+  }
+
+  function itemIntersectsRect(item: BoardItem, rect: { left: number; top: number; right: number; bottom: number }): boolean {
+    const position = pointFromKey(selectionKey(item));
+    if (!position) return false;
+    const width = item.kind === 'note' ? NOTE_W : HUB_W;
+    const element = document.getElementById(`${item.kind}-${item.id}`);
+    const height = element?.offsetHeight ?? (item.kind === 'note' ? NOTE_H : HUB_H);
+    const top = position.y - (item.kind === 'note' ? 12 : 8);
+    return position.x <= rect.right &&
+      position.x + width >= rect.left &&
+      top <= rect.bottom &&
+      top + height >= rect.top;
+  }
+
+  function finishInteraction(event: PointerEvent, cancelled = false) {
+    if (interaction.mode === 'idle' || interaction.pointerId !== event.pointerId) return;
+    const board = event.currentTarget as HTMLDivElement;
+
+    if (interaction.mode === 'draggingItems') {
+      flushItemMove(cancelled ? undefined : boardPoint(event));
+      if (cancelled) updateItems(interaction.initialPositions);
+    } else if (interaction.mode === 'marquee') {
+      if (!cancelled) {
+        const endScreen = boardPoint(event);
+        const moved = interaction.moved ||
+          Math.abs(endScreen.x - interaction.startScreen.x) >= MARQUEE_THRESHOLD ||
+          Math.abs(endScreen.y - interaction.startScreen.y) >= MARQUEE_THRESHOLD;
+        if (!moved) {
+          selectedItems = new Set();
+        } else {
+          const endWorld = screenToWorld(endScreen);
+          const rect = {
+            left: Math.min(interaction.startWorld.x, endWorld.x),
+            top: Math.min(interaction.startWorld.y, endWorld.y),
+            right: Math.max(interaction.startWorld.x, endWorld.x),
+            bottom: Math.max(interaction.startWorld.y, endWorld.y)
+          };
+          const hits = [
+            ...boardNotes.map(note => ({ kind: 'note' as const, id: note.id })),
+            ...activeCases.map(item => ({ kind: 'hub' as const, id: item.id }))
+          ].filter(item => itemIntersectsRect(item, rect)).map(selectionKey);
+          selectedItems = interaction.additive
+            ? new Set([...interaction.initialSelection, ...hits])
+            : new Set(hits);
+        }
+      }
+    }
+
+    interaction = { mode: 'idle' };
+    if (board.hasPointerCapture(event.pointerId)) board.releasePointerCapture(event.pointerId);
+  }
+
+  function handlePointerUp(event: PointerEvent) {
+    finishInteraction(event);
+  }
+
+  function handlePointerCancel(event: PointerEvent) {
+    finishInteraction(event, true);
+  }
+
+  function handleItemKeydown(event: KeyboardEvent, item: BoardItem) {
+    if (event.target !== event.currentTarget || event.key !== 'Enter') return;
+    event.preventDefault();
+    event.stopPropagation();
+    applySelection(item, event.shiftKey || event.ctrlKey || event.metaKey);
+  }
+
+  function handleWindowKeyDown(event: KeyboardEvent) {
+    if (event.code === 'Space' && !event.repeat && !isTypingTarget(event.target)) {
+      isSpacePressed = true;
+      event.preventDefault();
+    }
+    if (event.key === 'Escape') {
+      flushItemMove();
+      if (interaction.mode === 'draggingItems') updateItems(interaction.initialPositions);
+      closeNotePreview();
+      if (interaction.mode !== 'idle' && boardCanvas?.hasPointerCapture(interaction.pointerId)) {
+        boardCanvas.releasePointerCapture(interaction.pointerId);
+      }
+      interaction = { mode: 'idle' };
+      selectedItems = new Set();
     }
   }
 
-  function onPan(e: MouseEvent) {
-    if (!isPanning) return;
-    const board = document.getElementById('evidence-board-canvas');
-    if (!board) return;
-    board.scrollLeft -= (e.clientX - panLastX) * PAN_SENSITIVITY;
-    board.scrollTop -= (e.clientY - panLastY) * PAN_SENSITIVITY;
-    panLastX = e.clientX;
-    panLastY = e.clientY;
+  function handleWindowKeyUp(event: KeyboardEvent) {
+    if (event.code === 'Space') isSpacePressed = false;
   }
 
-  function handleBoardContextMenu(e: MouseEvent) {
-    if (activeTool === 'hand') e.preventDefault();
+  function isTypingTarget(target: EventTarget | null): boolean {
+    if (!(target instanceof HTMLElement)) return false;
+    return target.isContentEditable ||
+      target.closest('button, a, input, textarea, select, [data-board-controls]') !== null;
   }
 
-  function endPan() {
-    isPanning = false;
-    window.removeEventListener('mousemove', onPan);
-    window.removeEventListener('mouseup', endPan);
+  function handleWindowBlur() {
+    isSpacePressed = false;
+    if (interaction.mode !== 'idle') {
+      flushItemMove();
+      if (interaction.mode === 'draggingItems') updateItems(interaction.initialPositions);
+      if (boardCanvas.hasPointerCapture(interaction.pointerId)) {
+        boardCanvas.releasePointerCapture(interaction.pointerId);
+      }
+      interaction = { mode: 'idle' };
+    }
   }
 
   onDestroy(() => {
-    window.removeEventListener('mousemove', onDrag);
-    window.removeEventListener('mouseup', endDrag);
-    window.removeEventListener('mousemove', onPan);
-    window.removeEventListener('mouseup', endPan);
+    if (pendingDragFrame) cancelAnimationFrame(pendingDragFrame);
   });
 
   onMount(() => {
-    boardCanvas.scrollLeft = WORLD_ORIGIN * zoom - boardCanvas.clientWidth / 2;
-    boardCanvas.scrollTop = WORLD_ORIGIN * zoom - boardCanvas.clientHeight / 2;
+    viewport = {
+      x: boardCanvas.clientWidth / 2 - WORLD_ORIGIN,
+      y: boardCanvas.clientHeight / 2 - WORLD_ORIGIN,
+      scale: 1
+    };
   });
+
+  $: gridStep = GRID_SIZE * viewport.scale;
+  $: gridPositionX = ((viewport.x % gridStep) + gridStep) % gridStep;
+  $: gridPositionY = ((viewport.y % gridStep) + gridStep) % gridStep;
+  $: marqueeRect = interaction.mode === 'marquee' && interaction.moved
+    ? (() => {
+        const start = worldToScreen(interaction.startWorld);
+        const end = worldToScreen(interaction.currentWorld);
+        return {
+          left: Math.min(start.x, end.x),
+          top: Math.min(start.y, end.y),
+          width: Math.abs(end.x - start.x),
+          height: Math.abs(end.y - start.y)
+        };
+      })()
+    : null;
 
   // Build SVG thread paths using cubic bezier curves
   function threadPath(x1: number, y1: number, x2: number, y2: number): string {
@@ -215,10 +443,6 @@
 
   function closeNotePreview() {
     previewNote = null;
-  }
-
-  function handlePreviewKeydown(event: KeyboardEvent) {
-    if (event.key === 'Escape') closeNotePreview();
   }
 
   function openModal(n?: Note) {
@@ -285,7 +509,15 @@
     if (editingNoteId) {
       updateNote(editingNoteId, noteData);
     } else {
-      addNote(noteData);
+      const center = screenToWorld({
+        x: boardCanvas.clientWidth / 2,
+        y: boardCanvas.clientHeight / 2
+      });
+      addNote({
+        ...noteData,
+        positionX: center.x - NOTE_W / 2,
+        positionY: center.y - NOTE_H / 2
+      });
     }
     isModalOpen = false;
   }
@@ -295,7 +527,7 @@
   }
 </script>
 
-<svelte:window on:keydown={handlePreviewKeydown} />
+<svelte:window on:keydown={handleWindowKeyDown} on:keyup={handleWindowKeyUp} on:blur={handleWindowBlur} />
 
 {#if !$isInitialized}
   <div class="flex-1 flex flex-col items-center justify-center text-secondary animate-pulse space-y-4">
@@ -322,7 +554,7 @@
         <Map size={24} class="text-accent" />
         EVIDENCE BOARD <span class="text-accent">{caseItem.caseNumber}</span>
       </h1>
-      <p class="text-secondary font-mono text-xs mt-0.5">{caseItem.title} · Drag notes and case hub · 40px grid</p>
+      <p class="text-secondary font-mono text-xs mt-0.5">{caseItem.title} · Drag items · Middle/Space-drag to pan · Ctrl-scroll to zoom</p>
     </div>
     <div class="flex items-center gap-3">
       <label for="snap-to-grid" class="inline-flex items-center gap-2 text-secondary font-mono text-[10px] cursor-pointer select-none">
@@ -349,76 +581,54 @@
     <div
       id="evidence-board-canvas"
       bind:this={boardCanvas}
-      class="flex-1 relative overflow-auto border border-border rounded-sm {activeTool === 'hand' ? (isPanning ? 'cursor-grabbing' : 'cursor-grab') : ''}"
-      style="min-height: 600px;"
-      on:mousedown={startPan}
-      on:click={rememberHandClick}
-      on:contextmenu={handleBoardContextMenu}
+      role="application"
+      aria-label="Interactive evidence board. Use middle mouse or hold Space and drag to pan. Use Shift, Control, or Command with click to select multiple items."
+      class="flex-1 relative overflow-hidden border border-border rounded-sm touch-none select-none {interaction.mode === 'panning' ? 'cursor-grabbing' : 'cursor-grab'}"
+      style="min-height: 600px; user-select: none; background-color: #111315; background-image: linear-gradient(to right, #30353a 1px, transparent 1px), linear-gradient(to bottom, #30353a 1px, transparent 1px); background-size: {gridStep}px {gridStep}px; background-position: {gridPositionX}px {gridPositionY}px;"
+      on:pointerdown={handlePointerDown}
+      on:pointermove={handlePointerMove}
+      on:pointerup={handlePointerUp}
+      on:pointercancel={handlePointerCancel}
+      on:lostpointercapture={handlePointerCancel}
+      on:contextmenu={preventContextMenu}
+      on:wheel|nonpassive={handleWheel}
     >
-      <div class="sticky top-0 z-50 h-0 pointer-events-none">
-        <div data-board-controls class="absolute top-3 left-3 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg pointer-events-auto">
-          <button
-            on:click={() => { activeTool = 'select'; lastHandClick = 0; }}
-            aria-label="Select tool"
-            aria-pressed={activeTool === 'select'}
-            title="Select and move evidence"
-            class="px-2 py-1 rounded-sm font-mono text-[10px] transition-colors {activeTool === 'select' ? 'bg-accent text-primary' : 'text-secondary hover:text-primary'}"
-          >
-            SELECT
-          </button>
-          <button
-            on:click={() => { activeTool = 'hand'; lastHandClick = 0; }}
-            aria-label="Hand tool"
-            aria-pressed={activeTool === 'hand'}
-            title={handGesture === 'right-drag' ? 'Right-click and drag to pan the board' : 'Double-click, hold, and drag to pan the board'}
-            class="px-2 py-1 rounded-sm font-mono text-[10px] transition-colors {activeTool === 'hand' ? 'bg-accent text-primary' : 'text-secondary hover:text-primary'}"
-          >
-            HAND
-          </button>
-          {#if activeTool === 'hand'}
-            <label class="sr-only" for="hand-gesture">Hand tool gesture</label>
-            <select
-              id="hand-gesture"
-              data-board-controls
-              bind:value={handGesture}
-              on:change={() => lastHandClick = 0}
-              class="bg-background border border-border rounded-sm px-1.5 py-1 font-mono text-[10px] text-secondary focus:outline-none focus:border-accent"
-            >
-              <option value="right-drag">RIGHT DRAG</option>
-              <option value="double-click-drag">DOUBLE-CLICK DRAG</option>
-            </select>
-          {/if}
-        </div>
-        <div data-board-controls class="absolute top-3 right-3 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg pointer-events-auto">
-          <button
-            on:click={() => adjustZoom(-0.1)}
-            disabled={zoom <= MIN_ZOOM}
-            aria-label="Zoom out"
-            title="Zoom out"
-            class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            <ZoomOut size={16} />
-          </button>
-          <span class="min-w-[3.5rem] text-center font-mono text-[10px] text-primary">{Math.round(zoom * 100)}%</span>
-          <button
-            on:click={() => adjustZoom(0.1)}
-            disabled={zoom >= MAX_ZOOM}
-            aria-label="Zoom in"
-            title="Zoom in"
-            class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          >
-            <ZoomIn size={16} />
-          </button>
-        </div>
+      {#if marqueeRect}
+        <div
+          aria-hidden="true"
+          class="absolute z-40 border border-accent bg-accent/20 pointer-events-none"
+          style="left: {marqueeRect.left}px; top: {marqueeRect.top}px; width: {marqueeRect.width}px; height: {marqueeRect.height}px;"
+        ></div>
+      {/if}
+
+      <div data-board-controls class="absolute top-3 right-3 z-50 flex items-center gap-1 border border-border bg-background/90 rounded-sm p-1 shadow-lg">
+        <button
+          on:click={() => adjustZoomAt({ x: boardCanvas.clientWidth / 2, y: boardCanvas.clientHeight / 2 }, 1 / 1.1)}
+          disabled={viewport.scale <= MIN_ZOOM}
+          aria-label="Zoom out"
+          title="Zoom out"
+          class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <ZoomOut size={16} />
+        </button>
+        <span class="min-w-[3.5rem] text-center font-mono text-[10px] text-primary">{Math.round(viewport.scale * 100)}%</span>
+        <button
+          on:click={() => adjustZoomAt({ x: boardCanvas.clientWidth / 2, y: boardCanvas.clientHeight / 2 }, 1.1)}
+          disabled={viewport.scale >= MAX_ZOOM}
+          aria-label="Zoom in"
+          title="Zoom in"
+          class="p-1.5 text-secondary hover:text-primary disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        >
+          <ZoomIn size={16} />
+        </button>
       </div>
 
-      <div class="relative shrink-0" style="width: {WORLD_SIZE * zoom}px; height: {WORLD_SIZE * zoom}px;">
-        <div
-          class="absolute top-0 left-0 origin-top-left"
-          style="width: {WORLD_SIZE}px; height: {WORLD_SIZE}px; transform: scale({zoom}); background-color: #111315; background-image: linear-gradient(to right, #30353a 1px, transparent 1px), linear-gradient(to bottom, #30353a 1px, transparent 1px); background-size: {GRID_SIZE}px {GRID_SIZE}px;"
-        >
+      <div
+        class="absolute top-0 left-0 origin-top-left"
+        style="width: {WORLD_SIZE}px; height: {WORLD_SIZE}px; transform: translate({viewport.x}px, {viewport.y}px) scale({viewport.scale});"
+      >
       <!-- SVG Thread Overlay -->
-      <svg class="absolute inset-0 pointer-events-none z-10" style="width: 100%; height: 100%; overflow: visible;">
+      <svg aria-hidden="true" class="absolute inset-0 pointer-events-none z-10" style="width: 100%; height: 100%; overflow: visible;">
         <defs>
           <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
             <path d="M 0 0 L 6 3 L 0 6 z" fill="#A64242" opacity="0.7" />
@@ -473,15 +683,21 @@
         {/each}
       </svg>
 
+      <div role="listbox" aria-label="Evidence board items" aria-multiselectable="true" class="absolute inset-0">
       <!-- Case Hubs (draggable) -->
       {#each activeCases as c}
         {#if hubPositions[c.id]}
           <!-- svelte-ignore a11y-no-static-element-interactions -->
           <div
             id="hub-{c.id}"
-            class="absolute z-20 select-none {activeTool === 'select' ? 'cursor-move' : ''} {selectedTarget?.kind === 'hub' && selectedTarget.id === c.id ? 'ring-2 ring-accent ring-offset-2 ring-offset-[#111315]' : ''}"
+            data-board-item="hub"
+            data-item-id={c.id}
+            role="option"
+            tabindex="0"
+            aria-selected={isSelected({ kind: 'hub', id: c.id })}
+            on:keydown={(event) => handleItemKeydown(event, { kind: 'hub', id: c.id })}
+            class="absolute z-20 select-none {interaction.mode === 'panning' ? 'cursor-grabbing' : 'cursor-move'} {isSelected({ kind: 'hub', id: c.id }) ? 'ring-2 ring-accent ring-offset-2 ring-offset-[#111315]' : ''}"
             style="left: {WORLD_ORIGIN + hubPositions[c.id].x}px; top: {WORLD_ORIGIN + hubPositions[c.id].y}px; width: {HUB_W}px;"
-            on:mousedown={(e) => startDragHub(e, c.id)}
           >
             <div class="bg-background border-2 border-accent rounded-sm p-2 flex flex-col items-center text-center shadow-[0_0_20px_rgba(166,66,66,0.35)]">
               <Target size={16} class="text-accent mb-1" />
@@ -506,9 +722,14 @@
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div
           id="note-{note.id}"
-          class="absolute z-30 select-none group {activeTool === 'select' ? 'cursor-move' : ''} {selectedTarget?.kind === 'note' && selectedTarget.id === note.id ? 'ring-2 ring-accent ring-offset-2 ring-offset-[#111315]' : ''}"
+          data-board-item="note"
+          data-item-id={note.id}
+          role="option"
+          tabindex="0"
+          aria-selected={isSelected({ kind: 'note', id: note.id })}
+          on:keydown={(event) => handleItemKeydown(event, { kind: 'note', id: note.id })}
+          class="absolute z-30 select-none group {interaction.mode === 'panning' ? 'cursor-grabbing' : 'cursor-move'} {isSelected({ kind: 'note', id: note.id }) ? 'ring-2 ring-accent ring-offset-2 ring-offset-[#111315]' : ''}"
           style="left: {WORLD_ORIGIN + note.positionX}px; top: {WORLD_ORIGIN + note.positionY}px; width: {NOTE_W}px;"
-          on:mousedown={(e) => startDragNote(e, note)}
         >
           <!-- Pin -->
           <div class="absolute -top-3 left-1/2 -translate-x-1/2 w-4 h-4 bg-accent rounded-full border-2 border-background shadow-lg z-40"></div>
@@ -558,6 +779,7 @@
           </div>
         </div>
       {/each}
+      </div>
 
       <!-- Empty State -->
       {#if boardNotes.length === 0}
@@ -567,9 +789,7 @@
           <p class="font-mono text-xs text-secondary mt-1">Add evidence to {caseItem.caseNumber} to build this case board</p>
         </div>
       {/if}
-        </div>
       </div>
-
     </div>
 
     <!-- Legend -->
