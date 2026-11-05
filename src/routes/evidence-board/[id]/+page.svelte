@@ -631,6 +631,10 @@
     updateNote(noteId, { content: toggleChecklistItem(note.content, lineIndex) });
   }
 
+  function hasChecklist(content: string): boolean {
+    return getNoteContentBlocks(content).some(block => block.type === 'checklist');
+  }
+
   function toggleNoteContent(noteId: string) {
     const next = new Set(expandedNoteContent);
     if (next.has(noteId)) next.delete(noteId);
@@ -876,23 +880,23 @@
               <Edit3 size={12} />
             </button>
             <h3 class="font-bold text-[#1a1a1a] text-xs mb-1.5 pr-5 font-mono uppercase tracking-wide">{note.title}</h3>
-            <div class="text-[#333] text-xs leading-relaxed font-serif {expandedNoteContent.has(note.id) ? '' : 'line-clamp-4'}">
+            <div class="text-[#333] text-xs leading-relaxed font-serif {expandedNoteContent.has(note.id) || hasChecklist(note.content) ? '' : 'line-clamp-4'}">
               {#each getNoteContentBlocks(note.content || '—') as block}
                 {#if block.type === 'checklist'}
-                  <button
-                    type="button"
-                    role="checkbox"
-                    aria-checked={block.checked}
-                    aria-label="{block.checked ? 'Mark incomplete' : 'Mark complete'}: {block.text}"
-                    on:pointerdown|stopPropagation
-                    on:click|stopPropagation={() => toggleNoteChecklistItem(note.id, block.lineIndex)}
-                    class="inline-flex max-w-full items-start gap-1 text-left align-top hover:text-accent"
-                  >
-                    <span aria-hidden="true" class="shrink-0">{block.checked ? '☑' : '☐'}</span>
+                  <label class="flex max-w-full items-start gap-1 text-left hover:text-accent">
+                    <input
+                      type="checkbox"
+                      checked={block.checked}
+                      aria-label="{block.checked ? 'Mark incomplete' : 'Mark complete'}: {block.text}"
+                      on:pointerdown|stopPropagation
+                      on:click|stopPropagation
+                      on:change|stopPropagation={() => toggleNoteChecklistItem(note.id, block.lineIndex)}
+                      class="mt-0.5 h-3 w-3 shrink-0 accent-[#A64242]"
+                    />
                     <span class={block.checked ? 'line-through opacity-60' : ''}>
                       {@html formatNoteContent(block.text)}
                     </span>
-                  </button>
+                  </label>
                 {:else}
                   {@html formatNoteContent(block.content)}
                 {/if}
