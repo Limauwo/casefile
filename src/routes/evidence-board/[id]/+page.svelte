@@ -4,7 +4,7 @@
   import NoteEditor from '$lib/NoteEditor.svelte';
   import EvidenceBoardMinimap from '$lib/EvidenceBoardMinimap.svelte';
   import type { MinimapItem } from '$lib/evidenceBoardMinimap';
-  import { formatNoteContent } from '$lib/noteFormatting';
+  import { formatNoteContent, getNoteContentBlocks, toggleChecklistItem } from '$lib/noteFormatting';
   import { FileText, Plus, X, Edit3, Trash2, Map, Target, ArrowLeft, Eye, ZoomIn, ZoomOut } from 'lucide-svelte';
   import { onDestroy } from 'svelte';
 
@@ -33,6 +33,7 @@
   let viewport = { x: 0, y: 0, scale: 1 };
   let interaction: Interaction = { mode: 'idle' };
   let selectedItems = new Set<string>();
+  let expandedNoteContent = new Set<string>();
   let isSpacePressed = false;
   let snapToGridEnabled = true;
   let boardCanvas: HTMLDivElement;
@@ -624,6 +625,19 @@
     isModalOpen = false;
   }
 
+  function toggleNoteChecklistItem(noteId: string, lineIndex: number) {
+    const note = boardNotes.find(item => item.id === noteId);
+    if (!note) return;
+    updateNote(noteId, { content: toggleChecklistItem(note.content, lineIndex) });
+  }
+
+  function toggleNoteContent(noteId: string) {
+    const next = new Set(expandedNoteContent);
+    if (next.has(noteId)) next.delete(noteId);
+    else next.add(noteId);
+    expandedNoteContent = next;
+  }
+
   function formatDate(iso: string) {
     return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
   }
@@ -862,7 +876,28 @@
               <Edit3 size={12} />
             </button>
             <h3 class="font-bold text-[#1a1a1a] text-xs mb-1.5 pr-5 font-mono uppercase tracking-wide">{note.title}</h3>
-            <div class="text-[#333] text-xs leading-relaxed font-serif line-clamp-4">{@html formatNoteContent(note.content || '—')}</div>
+            <div class="text-[#333] text-xs leading-relaxed font-serif {expandedNoteContent.has(note.id) ? '' : 'line-clamp-4'}">
+              {#each getNoteContentBlocks(note.content || '—') as block}
+                {#if block.type === 'checklist'}
+                  <button
+                    type="button"
+                    role="checkbox"
+                    aria-checked={block.checked}
+                    aria-label="{block.checked ? 'Mark incomplete' : 'Mark complete'}: {block.text}"
+                    on:pointerdown|stopPropagation
+                    on:click|stopPropagation={() => toggleNoteChecklistItem(note.id, block.lineIndex)}
+                    class="inline-flex max-w-full items-start gap-1 text-left align-top hover:text-accent"
+                  >
+                    <span aria-hidden="true" class="shrink-0">{block.checked ? '☑' : '☐'}</span>
+                    <span class={block.checked ? 'line-through opacity-60' : ''}>
+                      {@html formatNoteContent(block.text)}
+                    </span>
+                  </button>
+                {:else}
+                  {@html formatNoteContent(block.content)}
+                {/if}
+              {/each}
+            </div>
 
             <div class="mt-2 pt-1.5 border-t border-[#c8c4b0] flex items-center justify-between">
               <div class="flex items-center gap-2 min-w-0">
@@ -878,6 +913,17 @@
                 {/if}
               </div>
               <div class="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  on:pointerdown|stopPropagation
+                  on:click|stopPropagation={() => toggleNoteContent(note.id)}
+                  aria-expanded={expandedNoteContent.has(note.id)}
+                  aria-label={expandedNoteContent.has(note.id) ? 'Collapse note content' : 'Fit all note content'}
+                  class="font-mono text-[9px] leading-none text-[#555] hover:text-accent transition-colors"
+                  title={expandedNoteContent.has(note.id) ? 'Collapse note content' : 'Show all note content'}
+                >
+                  {expandedNoteContent.has(note.id) ? 'COLLAPSE' : 'FIT CONTENT'}
+                </button>
                 <button
                   on:click|stopPropagation={() => showNotePreview(note)}
                   class="inline-flex items-center gap-1 font-mono text-[9px] leading-none text-[#555] hover:text-accent transition-colors"

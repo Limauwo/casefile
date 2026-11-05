@@ -52,6 +52,25 @@
     textarea.setSelectionRange(lineStart, lineStart + formattedLines.length);
     rememberSelection();
   }
+
+  async function insertChecklist() {
+    const start = selectionStart;
+    const end = selectionEnd;
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    const nextNewline = value.indexOf('\n', end);
+    const lineEnd = nextNewline === -1 ? value.length : nextNewline;
+    const selectedLines = value.slice(lineStart, lineEnd);
+    const formattedLines = selectedLines
+      .split('\n')
+      .map(line => /^- \[[ xX]\] /.test(line) ? line : `- [ ] ${line.replace(/^- /, '')}`)
+      .join('\n');
+
+    value = `${value.slice(0, lineStart)}${formattedLines}${value.slice(lineEnd)}`;
+    await tick();
+    textarea.focus();
+    textarea.setSelectionRange(lineStart, lineStart + formattedLines.length);
+    rememberSelection();
+  }
 </script>
 
 <div class="space-y-2">
@@ -77,6 +96,16 @@
       title="Bullet list"
     >
       • List
+    </button>
+    <button
+      type="button"
+      on:mousedown|preventDefault={rememberSelection}
+      on:click={insertChecklist}
+      class="border border-border hover:border-accent hover:text-accent rounded-sm px-2 py-1 text-xs text-primary"
+      aria-label="Checklist or to-do list"
+      title="Checklist / to-do list"
+    >
+      ☐ To-do / Checklist
     </button>
     <span class="text-[10px] text-secondary ml-1">Select text, then apply formatting</span>
   </div>
