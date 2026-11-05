@@ -27,6 +27,7 @@
   $: currentPath = $page?.url?.pathname || "/";
   let showSettingsModal = false;
   let showMobileMenu = false;
+  let showDesktopSidebar = true;
 
   function filterAndGo(status: string) {
     $filterStatus = status as any;
@@ -50,6 +51,7 @@
 
 <div class="flex h-screen overflow-hidden bg-background">
   <!-- Sidebar (desktop) -->
+  {#if showDesktopSidebar}
   <aside class="w-64 border-r border-border bg-surface flex-col hidden md:flex">
     <div class="p-6 border-b border-border">
       <div class="flex items-center gap-3 text-accent mb-1">
@@ -164,6 +166,7 @@
       </button>
     </div>
   </aside>
+  {/if}
 
   <!-- Main Content -->
   <main class="flex-1 flex flex-col min-w-0 overflow-hidden">
@@ -172,6 +175,16 @@
       class="h-16 border-b border-border bg-surface flex items-center justify-between px-6 shrink-0"
     >
       <div class="flex items-center gap-4">
+        <!-- Desktop sidebar toggle -->
+        <button
+          on:click={() => (showDesktopSidebar = !showDesktopSidebar)}
+          class="hidden md:inline-flex text-secondary hover:text-primary transition-colors"
+          aria-label={showDesktopSidebar ? "Hide sidebar" : "Show sidebar"}
+          aria-expanded={showDesktopSidebar}
+          title={showDesktopSidebar ? "Hide sidebar" : "Show sidebar"}
+        >
+          <Menu size={20} />
+        </button>
         <!-- Mobile menu button -->
         <button
           on:click={() => (showMobileMenu = !showMobileMenu)}
