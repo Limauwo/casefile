@@ -22,7 +22,6 @@
   const WORLD_ORIGIN = WORLD_SIZE / 2;
   const MIN_ZOOM = 0.2;
   const MAX_ZOOM = 3;
-  const PAN_SENSITIVITY = 0.65;
   const MARQUEE_THRESHOLD = 4;
   type Point = { x: number; y: number };
   type BoardItem = { kind: 'note' | 'hub'; id: string };
@@ -216,15 +215,13 @@
     event.preventDefault();
     if (interaction.mode !== 'idle') return;
     const point = boardPoint(event);
-    if (event.ctrlKey) {
-      adjustZoomAt(point, Math.exp(-event.deltaY * 0.01));
-      return;
-    }
-    viewport = {
-      ...viewport,
-      x: viewport.x - event.deltaX * PAN_SENSITIVITY,
-      y: viewport.y - event.deltaY * PAN_SENSITIVITY
-    };
+    const deltaPixels = event.deltaY * (
+      event.deltaMode === WheelEvent.DOM_DELTA_LINE ? 16
+        : event.deltaMode === WheelEvent.DOM_DELTA_PAGE ? boardCanvas.clientHeight
+          : 1
+    );
+    const boundedDelta = Math.max(-80, Math.min(80, deltaPixels));
+    adjustZoomAt(point, Math.exp(-boundedDelta * 0.0015));
   }
 
   function preventContextMenu(event: MouseEvent) {
@@ -675,7 +672,7 @@
         <Map size={24} class="text-accent" />
         EVIDENCE BOARD <span class="text-accent">{caseItem.caseNumber}</span>
       </h1>
-      <p class="text-secondary font-mono text-xs mt-0.5">{caseItem.title} · Drag items · Middle/Right/Space-drag or two-finger scroll to pan · Ctrl-scroll to zoom</p>
+      <p class="text-secondary font-mono text-xs mt-0.5">{caseItem.title} · Drag items · Scroll to zoom · Middle/Right/Space-drag to pan</p>
     </div>
     <div class="flex items-center gap-3">
       <label for="snap-to-grid" class="inline-flex items-center gap-2 text-secondary font-mono text-[10px] cursor-pointer select-none">
@@ -705,7 +702,7 @@
       use:observeBoard
       role="application"
       tabindex="0"
-      aria-label="Interactive evidence board. Use middle or right mouse, or hold Space and drag to pan. Use arrow keys to pan and Shift, Control, or Command with click to select multiple items."
+      aria-label="Interactive evidence board. Scroll to zoom. Use middle or right mouse, or hold Space and drag to pan. Use arrow keys to pan and Shift, Control, or Command with click to select multiple items."
       class="flex-1 relative overflow-hidden border border-border rounded-sm touch-none select-none outline-none focus-visible:ring-1 focus-visible:ring-accent {interaction.mode === 'panning' ? 'cursor-grabbing' : 'cursor-grab'}"
       style="min-height: 600px; user-select: none; background-color: #111315; background-image: linear-gradient(to right, #30353a 1px, transparent 1px), linear-gradient(to bottom, #30353a 1px, transparent 1px); background-size: {gridStep}px {gridStep}px; background-position: {gridPositionX}px {gridPositionY}px;"
       on:pointerdown={handlePointerDown}
