@@ -12,6 +12,19 @@
     .filter(a => a.relatedCaseId === caseId)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   $: caseNotes = $notes.filter(n => n.relatedCaseId === caseId);
+  const COLLAPSED_ITEM_COUNT = 3;
+  let showAllCaseNotes = false;
+  let showAllCaseActivities = false;
+  let expandedCaseId = '';
+  $: if (caseId !== expandedCaseId) {
+    expandedCaseId = caseId;
+    showAllCaseNotes = false;
+    showAllCaseActivities = false;
+  }
+  $: displayedCaseNotes = showAllCaseNotes ? caseNotes : caseNotes.slice(0, COLLAPSED_ITEM_COUNT);
+  $: displayedCaseActivities = showAllCaseActivities
+    ? caseActivities
+    : caseActivities.slice(0, COLLAPSED_ITEM_COUNT);
 
   // ── Edit inline metadata ──────────────────────────────────────
   let isEditing = false;
@@ -244,7 +257,7 @@
               <p class="text-secondary text-xs mt-1 opacity-40">Field notes and observations can be added and linked to this dossier.</p>
             </div>
           {/if}
-          {#each caseNotes as note (note.id)}
+          {#each displayedCaseNotes as note (note.id)}
             <div class="bg-surface border border-border p-4 rounded-sm hover:border-secondary transition-colors relative group">
               <div class="flex justify-between items-start gap-3 mb-2">
                 <h3 class="font-bold text-primary text-sm">{note.title}</h3>
@@ -280,6 +293,15 @@
               <p class="font-mono text-[10px] text-secondary/50 mt-2 pt-2 border-t border-border/50">Updated {fmt(note.updatedAt)}</p>
             </div>
           {/each}
+          {#if caseNotes.length > COLLAPSED_ITEM_COUNT}
+            <button
+              on:click={() => showAllCaseNotes = !showAllCaseNotes}
+              aria-expanded={showAllCaseNotes}
+              class="text-xs font-mono text-accent hover:underline"
+            >
+              {showAllCaseNotes ? 'SHOW LESS' : `READ MORE (${caseNotes.length - COLLAPSED_ITEM_COUNT})`}
+            </button>
+          {/if}
         </div>
       </div>
 
@@ -294,7 +316,7 @@
           <p class="text-secondary font-mono text-xs opacity-50">NO ACTIVITY RECORDED</p>
         {:else}
           <div class="space-y-0 border-l border-border/50 ml-1 pl-4">
-            {#each caseActivities as act}
+            {#each displayedCaseActivities as act}
               <div class="relative pb-4">
                 <div class="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-surface border border-border flex items-center justify-center">
                   <span class="text-[8px] text-accent">{actIcons[act.action] ?? '•'}</span>
@@ -305,6 +327,15 @@
               </div>
             {/each}
           </div>
+          {#if caseActivities.length > COLLAPSED_ITEM_COUNT}
+            <button
+              on:click={() => showAllCaseActivities = !showAllCaseActivities}
+              aria-expanded={showAllCaseActivities}
+              class="text-xs font-mono text-accent hover:underline"
+            >
+              {showAllCaseActivities ? 'SHOW LESS' : `READ MORE (${caseActivities.length - COLLAPSED_ITEM_COUNT})`}
+            </button>
+          {/if}
         {/if}
       </div>
     </div>
