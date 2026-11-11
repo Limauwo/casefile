@@ -12,19 +12,69 @@
     .filter(a => a.relatedCaseId === caseId)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
   $: caseNotes = $notes.filter(n => n.relatedCaseId === caseId);
-  const COLLAPSED_ITEM_COUNT = 3;
   let showAllCaseNotes = false;
   let showAllCaseActivities = false;
+  let visibleCaseActivityCount = 3;
   let expandedCaseId = '';
+  let notesSection: HTMLDivElement;
+  let activityHeading: HTMLHeadingElement;
+  let activityMeasureList: HTMLDivElement;
+  let activityFitFrame = 0;
   $: if (caseId !== expandedCaseId) {
     expandedCaseId = caseId;
     showAllCaseNotes = false;
     showAllCaseActivities = false;
   }
-  $: displayedCaseNotes = showAllCaseNotes ? caseNotes : caseNotes.slice(0, COLLAPSED_ITEM_COUNT);
+  $: displayedCaseNotes = showAllCaseNotes ? caseNotes : caseNotes.slice(0, 3);
   $: displayedCaseActivities = showAllCaseActivities
     ? caseActivities
-    : caseActivities.slice(0, COLLAPSED_ITEM_COUNT);
+    : caseActivities.slice(0, visibleCaseActivityCount);
+  $: caseActivities, showAllCaseActivities, scheduleActivityFit();
+
+  function scheduleActivityFit() {
+    if (typeof window === 'undefined' || showAllCaseActivities || activityFitFrame) return;
+    activityFitFrame = requestAnimationFrame(updateVisibleActivityCount);
+  }
+
+  function updateVisibleActivityCount() {
+    activityFitFrame = 0;
+    if (!notesSection || !activityHeading || !activityMeasureList || showAllCaseActivities) return;
+
+    const items = Array.from(
+      activityMeasureList.querySelectorAll<HTMLElement>('[data-activity-measure-item]')
+    );
+    if (items.length === 0) {
+      visibleCaseActivityCount = 0;
+      return;
+    }
+
+    const availableHeight = notesSection.getBoundingClientRect().height
+      - activityHeading.getBoundingClientRect().height
+      - 16;
+    const itemHeights = items.map(item => item.getBoundingClientRect().height);
+    if (itemHeights.reduce((total, height) => total + height, 0) <= availableHeight) {
+      visibleCaseActivityCount = items.length;
+      return;
+    }
+
+    const readMoreSpace = 16 + 16;
+    const entriesSpace = Math.max(0, availableHeight - readMoreSpace);
+    let usedHeight = 0;
+    let count = 0;
+    for (const height of itemHeights) {
+      if (count > 0 && usedHeight + height > entriesSpace) break;
+      usedHeight += height;
+      count += 1;
+    }
+    visibleCaseActivityCount = Math.max(1, count);
+  }
+
+  function observeActivityFit(node: HTMLElement) {
+    const observer = new ResizeObserver(scheduleActivityFit);
+    observer.observe(node);
+    scheduleActivityFit();
+    return { destroy: () => observer.disconnect() };
+  }
 
   // ── Edit inline metadata ──────────────────────────────────────
   let isEditing = false;
@@ -233,7 +283,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
 
       <!-- Notes Section -->
-      <div class="lg:col-span-2 space-y-4">
+      <div class="lg:col-span-2 space-y-4" bind:this={notesSection} use:observeActivityFit>
         <div class="flex items-center justify-between border-b border-border pb-2">
           <h2 class="font-mono text-sm font-semibold tracking-wider text-secondary flex items-center gap-2">
             <FileText size={15} /> INVESTIGATION NOTES
@@ -293,29 +343,29 @@
               <p class="font-mono text-[10px] text-secondary/50 mt-2 pt-2 border-t border-border/50">Updated {fmt(note.updatedAt)}</p>
             </div>
           {/each}
-          {#if caseNotes.length > COLLAPSED_ITEM_COUNT}
+          {#if caseNotes.length > 3}
             <button
               on:click={() => showAllCaseNotes = !showAllCaseNotes}
               aria-expanded={showAllCaseNotes}
               class="text-xs font-mono text-accent hover:underline"
             >
-              {showAllCaseNotes ? 'SHOW LESS' : `READ MORE (${caseNotes.length - COLLAPSED_ITEM_COUNT})`}
+              {showAllCaseNotes ? 'SHOW LESS' : `READ MORE (${caseNotes.length - 3})`}
             </button>
           {/if}
         </div>
       </div>
 
       <!-- Activity Timeline -->
-      <div class="space-y-4">
-        <h2 class="font-mono text-sm font-semibold tracking-wider text-secondary flex items-center gap-2 border-b border-border pb-2">
+      <div class="relative min-h-0 h-full flex flex-col gap-4">
+        <h2 bind:this={activityHeading} class="shrink-0 font-mono text-sm font-semibold tracking-wider text-secondary flex items-center gap-2 border-b border-border pb-2">
           <ActivityIcon size={15} /> CASE ACTIVITY
           <span class="text-xs font-normal text-border bg-border/30 px-1.5 rounded">{caseActivities.length}</span>
         </h2>
 
         {#if caseActivities.length === 0}
-          <p class="text-secondary font-mono text-xs opacity-50">NO ACTIVITY RECORDED</p>
+          <p class="flex-1 text-secondary font-mono text-xs opacity-50">NO ACTIVITY RECORDED</p>
         {:else}
-          <div class="space-y-0 border-l border-border/50 ml-1 pl-4">
+          <div class="shrink-0 space-y-0 border-l border-border/50 ml-1 pl-4">
             {#each displayedCaseActivities as act}
               <div class="relative pb-4">
                 <div class="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-surface border border-border flex items-center justify-center">
@@ -327,16 +377,34 @@
               </div>
             {/each}
           </div>
-          {#if caseActivities.length > COLLAPSED_ITEM_COUNT}
+          {#if caseActivities.length > visibleCaseActivityCount}
             <button
               on:click={() => showAllCaseActivities = !showAllCaseActivities}
               aria-expanded={showAllCaseActivities}
-              class="text-xs font-mono text-accent hover:underline"
+              class="shrink-0 text-xs font-mono text-accent hover:underline"
             >
-              {showAllCaseActivities ? 'SHOW LESS' : `READ MORE (${caseActivities.length - COLLAPSED_ITEM_COUNT})`}
+              {showAllCaseActivities ? 'SHOW LESS' : `READ MORE (${caseActivities.length - visibleCaseActivityCount})`}
             </button>
           {/if}
         {/if}
+        <div
+          bind:this={activityMeasureList}
+          use:observeActivityFit
+          aria-hidden="true"
+          style="position: absolute; left: -10000px; top: 0; width: calc(100% - 0.25rem); visibility: hidden; pointer-events: none;"
+          class="space-y-0 border-l border-border/50 ml-1 pl-4"
+        >
+          {#each caseActivities as act (act.id)}
+            <div class="relative pb-4" data-activity-measure-item>
+              <div class="absolute -left-[21px] top-1 w-3 h-3 rounded-full bg-surface border border-border flex items-center justify-center">
+                <span class="text-[8px] text-accent">{actIcons[act.action] ?? '•'}</span>
+              </div>
+              <p class="font-mono text-[10px] text-secondary/60 mb-0.5">{fmt(act.timestamp)}</p>
+              <p class="text-xs text-primary leading-snug">{act.description}</p>
+              <p class="font-mono text-[9px] text-accent/70 uppercase mt-0.5">{act.action.replace('_', ' ')}</p>
+            </div>
+          {/each}
+        </div>
       </div>
     </div>
   </div>
